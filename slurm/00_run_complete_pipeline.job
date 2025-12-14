@@ -1,0 +1,86 @@
+#!/bin/bash
+#SBATCH --job-name=00_complete_pipeline
+#SBATCH --partition=3090
+#SBATCH --gpus=1
+#SBATCH --cpus-per-task=12
+#SBATCH --mem=64G
+#SBATCH --time=30:00:00
+#SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/00_complete_pipeline_%j.out
+#SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/00_complete_pipeline_%j.err
+
+# =============================================================================
+# JOB MAESTRO: Pipeline Completo (7 Etapas)
+# =============================================================================
+# Ejecuta todas las etapas del pipeline OPRO+LoRA de forma secuencial
+# Tiempo estimado total: 26-28 horas
+# =============================================================================
+
+set -euo pipefail
+set -x
+
+REPO_CLEAN="/mnt/fast/nobackup/users/gb0048/opro2_clean"
+REPO_DATA="/mnt/fast/nobackup/users/gb0048/opro2"
+CONTAINER="$REPO_DATA/qwen_pipeline_v2.sif"
+SEED="${1:-42}"
+
+echo "[INFO] ========================================================================"
+echo "[INFO] PIPELINE COMPLETO - INICIO: $(date)"
+echo "[INFO] ========================================================================"
+echo "[INFO] Seed: $SEED"
+echo "[INFO] GPU Info:"
+nvidia-smi --query-gpu=name,memory.total --format=csv
+
+cd "$REPO_CLEAN"
+
+# Configurar cache de HuggingFace
+export HF_HOME="/mnt/fast/nobackup/users/gb0048/.cache/huggingface"
+export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+export HF_HUB_CACHE="$HF_HOME/hub"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE"
+mkdir -p logs results checkpoints
+
+export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+
+# Rutas de datos
+DATA_ROOT="$REPO_DATA/data"
+
+# Verificar que el contenedor existe
+if [ ! -f "$CONTAINER" ]; then
+    echo "[ERROR] Container not found: $CONTAINER"
+    exit 1
+fi
+
+# Ejecutar pipeline completo dentro del contenedor
+echo "[INFO] ========================================================================"
+echo "[INFO] Ejecutando pipeline completo con Apptainer..."
+echo "[INFO] ========================================================================"
+
+apptainer exec --nv \
+    --pwd "$REPO_CLEAN" \
+    --env HF_HOME="$HF_HOME" \
+    --env TRANSFORMERS_CACHE="$TRANSFORMERS_CACHE" \
+    --env HF_HUB_CACHE="$HF_HUB_CACHE" \
+    --env PYTORCH_CUDA_ALLOC_CONF="$PYTORCH_CUDA_ALLOC_CONF" \
+    "$CONTAINER" python3 scripts/run_complete_pipeline.py \
+        --seed "$SEED" \
+        --data_root "$DATA_ROOT" \
+        --output_dir "results/complete_pipeline_seed${SEED}"
+
+EXIT_CODE=$?
+
+echo "[INFO] ========================================================================"
+if [ $EXIT_CODE -eq 0 ]; then
+    echo "[INFO] ✓ PIPELINE COMPLETO - ÉXITO"
+    echo "[INFO] Resultados guardados en: results/complete_pipeline_seed${SEED}"
+    echo "[INFO] Métricas esperadas:"
+    echo "[INFO]   - BASE (baseline):      ~80% BA"
+    echo "[INFO]   - BASE + OPRO:          ~86.9% BA"
+    echo "[INFO]   - LoRA (baseline):      ~88% BA"
+    echo "[INFO]   - LoRA + OPRO (BEST):   ~93.7% BA"
+else
+    echo "[ERROR] ✗ PIPELINE COMPLETO - FALLÓ (Exit code: $EXIT_CODE)"
+fi
+echo "[INFO] FIN: $(date)"
+echo "[INFO] ========================================================================"
+
+exit $EXIT_CODE

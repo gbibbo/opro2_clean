@@ -1,0 +1,68 @@
+#!/bin/bash
+#SBATCH --job-name=03_opro_lora
+#SBATCH --partition=debug
+#SBATCH --gpus=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=48G
+#SBATCH --time=02:30:00
+#SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/03_opro_lora_%j.out
+#SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/03_opro_lora_%j.err
+
+# =============================================================================
+# ETAPA 5: OPRO on LoRA model
+# =============================================================================
+# Re-optimizes prompts on the fine-tuned LoRA model
+# =============================================================================
+
+set -euo pipefail
+set -x
+
+REPO_CLEAN="/mnt/fast/nobackup/users/gb0048/opro2_clean"
+REPO_DATA="/mnt/fast/nobackup/users/gb0048/opro2"
+CONTAINER="$REPO_DATA/qwen_pipeline_v2.sif"
+SEED="${1:-42}"
+
+echo "[INFO] Start: $(date)"
+nvidia-smi --query-gpu=name,memory.total --format=csv
+cd "$REPO_CLEAN"
+
+export HF_HOME="/mnt/fast/nobackup/users/gb0048/.cache/huggingface"
+export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+export HF_HUB_CACHE="$HF_HOME/hub"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE"
+mkdir -p logs
+
+export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+
+# Dev data from original repo
+DEV_CSV="$REPO_DATA/data/processed/experimental_variants/dev_metadata.csv"
+CHECKPOINT="$REPO_CLEAN/checkpoints/qwen_lora_seed${SEED}/final"
+
+if [ ! -f "$DEV_CSV" ]; then
+    echo "[ERROR] Dev data not found: $DEV_CSV"
+    exit 1
+fi
+
+if [ ! -d "$CHECKPOINT" ]; then
+    echo "[ERROR] LoRA checkpoint not found: $CHECKPOINT"
+    echo "[ERROR] Run '01_finetune_lora.job' first"
+    exit 1
+fi
+
+echo "[RUN] OPRO post-FT on LoRA model (Etapa 5)"
+apptainer exec --nv \
+  --pwd "$REPO_CLEAN" \
+  --env HF_HOME="$HF_HOME" \
+  --env TRANSFORMERS_CACHE="$TRANSFORMERS_CACHE" \
+  --env HF_HUB_CACHE="$HF_HUB_CACHE" \
+  --env PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True" \
+  "$CONTAINER" python3 scripts/opro_post_ft_v2.py \
+  --checkpoint "$CHECKPOINT" \
+  --train_csv "$DEV_CSV" \
+  --output_dir "results/opro_lora_seed${SEED}" \
+  --num_iterations 15 \
+  --samples_per_iter 20
+
+echo "[DONE] End: $(date)"
+echo "Results: results/opro_lora_seed${SEED}/"
+cat "results/opro_lora_seed${SEED}/best_prompt.txt"

@@ -1,0 +1,79 @@
+#!/bin/bash
+#SBATCH --job-name=07_eval_lora_opro
+#SBATCH --partition=3090
+#SBATCH --gpus=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=48G
+#SBATCH --time=02:00:00
+#SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/07_eval_lora_opro_%j.out
+#SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/07_eval_lora_opro_%j.err
+
+# =============================================================================
+# ETAPA 7: Evaluate LoRA + OPRO (BEST)
+# =============================================================================
+# Evaluates fine-tuned LoRA model with optimized prompt from OPRO
+# Expected performance: ~93.7% BA ⭐ BEST RESULT
+# =============================================================================
+
+set -euo pipefail
+set -x
+
+REPO_CLEAN="/mnt/fast/nobackup/users/gb0048/opro2_clean"
+REPO_DATA="/mnt/fast/nobackup/users/gb0048/opro2"
+CONTAINER="$REPO_DATA/qwen_pipeline_v2.sif"
+SEED="${1:-42}"
+
+echo "[INFO] Start: $(date)"
+nvidia-smi --query-gpu=name,memory.total --format=csv
+cd "$REPO_CLEAN"
+
+export HF_HOME="/mnt/fast/nobackup/users/gb0048/.cache/huggingface"
+export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+export HF_HUB_CACHE="$HF_HUB_CACHE"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE"
+mkdir -p logs
+
+export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+
+# Test manifest from original repo
+MANIFEST="$REPO_DATA/data/processed/conditions_final/conditions_manifest_split.parquet"
+BEST_PROMPT="$REPO_CLEAN/results/opro_lora_seed${SEED}/best_prompt.txt"
+CHECKPOINT="$REPO_CLEAN/checkpoints/qwen_lora_seed${SEED}/final"
+
+if [ ! -f "$MANIFEST" ]; then
+    echo "[ERROR] Manifest not found: $MANIFEST"
+    exit 1
+fi
+
+if [ ! -f "$BEST_PROMPT" ]; then
+    echo "[ERROR] Optimized prompt not found: $BEST_PROMPT"
+    echo "[ERROR] Run '03_opro_lora.job' first"
+    exit 1
+fi
+
+if [ ! -d "$CHECKPOINT" ]; then
+    echo "[ERROR] LoRA checkpoint not found: $CHECKPOINT"
+    echo "[ERROR] Run '01_finetune_lora.job' first"
+    exit 1
+fi
+
+echo "[INFO] Using optimized prompt from: $BEST_PROMPT"
+cat "$BEST_PROMPT"
+
+echo "[RUN] Evaluating LoRA + OPRO (Etapa 7 - BEST)"
+apptainer exec --nv \
+  --pwd "$REPO_CLEAN" \
+  --env HF_HOME="$HF_HOME" \
+  --env TRANSFORMERS_CACHE="$TRANSFORMERS_CACHE" \
+  --env HF_HUB_CACHE="$HF_HUB_CACHE" \
+  --env PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True" \
+  "$CONTAINER" python3 scripts/evaluate_simple.py \
+  --manifest "$MANIFEST" \
+  --prompt_file "$BEST_PROMPT" \
+  --checkpoint "$CHECKPOINT" \
+  --output_dir "results/eval_lora_opro" \
+  --batch_size 50
+
+echo "[DONE] End: $(date)"
+echo "Results: results/eval_lora_opro/"
+echo "Expected BA: ~93.7% ⭐ BEST RESULT"

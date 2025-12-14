@@ -1,0 +1,61 @@
+#!/bin/bash
+#SBATCH --job-name=04_eval_base
+#SBATCH --partition=3090
+#SBATCH --gpus=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=48G
+#SBATCH --time=02:00:00
+#SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/04_eval_base_%j.out
+#SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/04_eval_base_%j.err
+
+# =============================================================================
+# ETAPA 3a: Evaluate BASE model (sin OPRO)
+# =============================================================================
+# Evaluates base model with baseline prompt on all psychoacoustic conditions
+# =============================================================================
+
+set -euo pipefail
+set -x
+
+REPO_CLEAN="/mnt/fast/nobackup/users/gb0048/opro2_clean"
+REPO_DATA="/mnt/fast/nobackup/users/gb0048/opro2"
+CONTAINER="$REPO_DATA/qwen_pipeline_v2.sif"
+
+echo "[INFO] Start: $(date)"
+nvidia-smi --query-gpu=name,memory.total --format=csv
+cd "$REPO_CLEAN"
+
+export HF_HOME="/mnt/fast/nobackup/users/gb0048/.cache/huggingface"
+export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+export HF_HUB_CACHE="$HF_HUB_CACHE"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE"
+mkdir -p logs
+
+export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+
+# Test manifest from original repo
+MANIFEST="$REPO_DATA/data/processed/conditions_final/conditions_manifest_split.parquet"
+BASELINE_PROMPT="Does this audio contain human speech? Answer SPEECH or NONSPEECH."
+
+if [ ! -f "$MANIFEST" ]; then
+    echo "[ERROR] Manifest not found: $MANIFEST"
+    exit 1
+fi
+
+echo "[INFO] Prompt: $BASELINE_PROMPT"
+
+echo "[RUN] Evaluating BASE model (Etapa 3a)"
+apptainer exec --nv \
+  --pwd "$REPO_CLEAN" \
+  --env HF_HOME="$HF_HOME" \
+  --env TRANSFORMERS_CACHE="$TRANSFORMERS_CACHE" \
+  --env HF_HUB_CACHE="$HF_HUB_CACHE" \
+  --env PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True" \
+  "$CONTAINER" python3 scripts/evaluate_simple.py \
+  --manifest "$MANIFEST" \
+  --prompt "$BASELINE_PROMPT" \
+  --output_dir "results/eval_base" \
+  --batch_size 50
+
+echo "[DONE] End: $(date)"
+echo "Results: results/eval_base/"
