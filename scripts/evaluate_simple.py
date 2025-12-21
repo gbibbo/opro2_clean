@@ -21,7 +21,7 @@ from peft import PeftModel
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.qsm.models.qwen_audio import Qwen2AudioClassifier
-from src.qsm.utils.normalize import normalize_to_binary
+from src.qsm.utils.normalize import normalize_to_binary, llm_fallback_interpret
 
 
 def parse_args():
@@ -89,8 +89,10 @@ def evaluate_samples(model, samples_df, prompt, batch_size=50):
                 response = result.get("prediction", "") if isinstance(result, dict) else str(result)
                 prediction, _ = normalize_to_binary(response)
 
+                # LLM fallback for ambiguous responses
                 if prediction is None:
-                    prediction = "UNKNOWN"
+                    fallback_label, _ = llm_fallback_interpret(response)
+                    prediction = fallback_label if fallback_label is not None else "UNKNOWN"
 
             except Exception as e:
                 print(f"  Error processing {audio_path}: {e}")

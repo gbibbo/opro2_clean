@@ -61,7 +61,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.qsm.models.qwen_audio import Qwen2AudioClassifier
-from src.qsm.utils.normalize import normalize_to_binary
+from src.qsm.utils.normalize import normalize_to_binary, llm_fallback_interpret
 
 # ============================================================================
 # Data Classes
@@ -227,12 +227,12 @@ def sanitize_prompt(prompt: str) -> tuple[str, bool]:
         print(f"      ⚠️  Rejected: Too long ({len(cleaned)} chars)")
         return cleaned, False
 
-    # Must contain SPEECH and NON-SPEECH keywords
-    upper = cleaned.upper()
-    if "SPEECH" not in upper or "NON-SPEECH" not in upper:
-        if "SPEECH" not in upper and "NONSPEECH" not in upper:
-            print("      ⚠️  Rejected: Missing SPEECH/NON-SPEECH keywords")
-            return cleaned, False
+    # REMOVED: Keyword restriction to allow open-ended prompts
+    # The normalize_to_binary() function handles various response formats including:
+    # - Binary labels (SPEECH/NONSPEECH)
+    # - Yes/No responses
+    # - Synonyms (voice, talking, music, noise, etc.)
+    # - Open descriptions
 
     # Remove multiple spaces and newlines
     cleaned = re.sub(r"\s+", " ", cleaned)
@@ -353,8 +353,8 @@ class OPROClassicOptimizer:
             history_str += f"\n{i}. Reward={candidate.reward:.4f} | BA_clip={candidate.ba_clip:.3f} | BA_cond={candidate.ba_conditions:.3f}\n"
             history_str += f'   "{clean_prompt}"\n'
 
-        meta_prompt = f"""TASK: Optimize prompts for audio classification (Qwen2-Audio-7B-Instruct).
-The model receives audio and must classify it as SPEECH or NON-SPEECH.
+        meta_prompt = f"""TASK: Optimize prompts for audio speech detection (Qwen2-Audio-7B-Instruct).
+The model receives audio and must determine if it contains human speech or not.
 
 OBJECTIVE: Maximize performance on psychoacoustic degradations:
 - Short durations (20-200ms clips)
@@ -383,12 +383,17 @@ Generate {self.candidates_per_iter} NEW prompt candidates that:
 2. Encourage robust detection on SHORT and NOISY clips
 3. Use simple, direct language (model is instruction-tuned)
 4. Build on insights from top prompts above
-5. Explore semantic variations: question style, command style, description style
+5. Explore DIVERSE prompt formats:
+   - Direct questions (e.g., "What do you hear?", "Describe the audio")
+   - Binary choice prompts (e.g., "SPEECH or NONSPEECH?")
+   - Command style (e.g., "Classify this audio")
+   - Open-ended queries (e.g., "What type of sound is this?")
 6. Consider emphasizing: brevity detection, noise robustness, voice/speech keywords
 
 CONSTRAINTS:
 - Each prompt must be COMPLETE and STANDALONE (no placeholders)
-- Must include instruction to respond with ONLY "SPEECH" or "NON-SPEECH" (or similar binary format)
+- Prompts can be ANY format: questions, commands, statements, binary choice, open-ended
+- The model's response will be automatically parsed to determine speech detection
 - Avoid overly complex or multi-step instructions
 - Prompts must be plain text (NO special tokens, NO markup)
 
@@ -859,8 +864,15 @@ def make_evaluator_fn(args, evaluator_model):
                     verbalizers=["SPEECH", "NONSPEECH"],
                 )
 
+                # LLM fallback for ambiguous responses
                 if normalized_label is None:
-                    normalized_label = result.label
+                    fallback_label, fallback_conf = llm_fallback_interpret(result.raw_output)
+                    if fallback_label is not None:
+                        normalized_label = fallback_label
+                        confidence = fallback_conf
+                    else:
+                        # Last resort: use model's raw prediction
+                        normalized_label = result.label
 
                 is_correct = (normalized_label == ground_truth) if normalized_label else False
 

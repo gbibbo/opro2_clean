@@ -64,7 +64,9 @@ apptainer exec --nv \
     "$CONTAINER" python3 scripts/run_complete_pipeline.py \
         --seed "$SEED" \
         --data_root "$DATA_ROOT" \
-        --output_dir "results/complete_pipeline_seed${SEED}"
+        --output_dir "results/complete_pipeline_seed${SEED}_opro_open" \
+        --skip_training \
+        --skip_baseline_evals
 
 EXIT_CODE=$?
 

@@ -1,0 +1,39 @@
+#!/bin/bash
+#SBATCH --job-name=test_open_prompts
+#SBATCH --partition=3090
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=8G
+#SBATCH --time=00:10:00
+#SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/test_open_prompts_%j.out
+#SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/test_open_prompts_%j.err
+
+# =============================================================================
+# Test: Open-ended prompts and LLM fallback
+# =============================================================================
+
+set -euo pipefail
+set -x
+
+REPO_CLEAN="/mnt/fast/nobackup/users/gb0048/opro2_clean"
+
+echo "[INFO] ========================================================================"
+echo "[INFO] TEST OPEN-ENDED PROMPTS - INICIO: $(date)"
+echo "[INFO] ========================================================================"
+
+cd "$REPO_CLEAN"
+
+# Ejecutar test (no requiere GPU, solo parsing de texto)
+python3 test_open_prompts.py
+
+EXIT_CODE=$?
+
+echo "[INFO] ========================================================================"
+if [ $EXIT_CODE -eq 0 ]; then
+    echo "[INFO] ✓ TESTS PASSED"
+else
+    echo "[ERROR] ✗ TESTS FAILED (Exit code: $EXIT_CODE)"
+fi
+echo "[INFO] FIN: $(date)"
+echo "[INFO] ========================================================================"
+
+exit $EXIT_CODE

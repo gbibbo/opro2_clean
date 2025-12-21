@@ -66,6 +66,8 @@ def main():
                        help="Output directory (default: results/pipeline_run_YYYYMMDD_HHMMSS)")
     parser.add_argument("--skip_training", action="store_true",
                        help="Skip LoRA training (use existing checkpoint)")
+    parser.add_argument("--skip_baseline_evals", action="store_true",
+                       help="Skip baseline evaluations (Stage 1 and 3)")
     parser.add_argument("--skip_opro_base", action="store_true",
                        help="Skip OPRO on base model (use existing prompt)")
     parser.add_argument("--skip_opro_lora", action="store_true",
@@ -84,7 +86,8 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
 
     # Define paths
-    manifest = f"{args.data_root}/processed/conditions_final/conditions_manifest_split.parquet"
+    # Use CSV manifest instead of parquet (same as opro2 jobs)
+    manifest = f"{args.data_root}/processed/variants_validated_1000/test_metadata.csv"
     checkpoint_dir = f"checkpoints/qwen_lora_seed{args.seed}"
     checkpoint_path = f"{checkpoint_dir}/final"
 
@@ -100,20 +103,25 @@ def main():
     # Track failed stages
     failed_stages = []
 
+    # Define baseline prompt (used in multiple stages)
+    baseline_prompt = "Does this audio contain human speech? Answer SPEECH or NONSPEECH."
+
     # =========================================================================
     # STAGE 1: Baseline Evaluation (BASE model, default prompt)
     # =========================================================================
-    baseline_prompt = "Does this audio contain human speech? Answer SPEECH or NONSPEECH."
-    baseline_out = f"{output_dir}/01_eval_base_baseline.csv"
+    if not args.skip_baseline_evals:
+        baseline_out = f"{output_dir}/01_eval_base_baseline.csv"
 
-    cmd = f"""python3 scripts/evaluate_simple.py \\
-        --manifest "{manifest}" \\
-        --prompt "{baseline_prompt}" \\
-        --output_dir "{output_dir}/01_baseline" \\
-        --batch_size 50"""
+        cmd = f"""python3 scripts/evaluate_simple.py \\
+            --manifest "{manifest}" \\
+            --prompt "{baseline_prompt}" \\
+            --output_dir "{output_dir}/01_baseline" \\
+            --batch_size 50"""
 
-    if not run_command(cmd, "Stage 1: Baseline Evaluation", args.dry_run):
-        failed_stages.append("Stage 1")
+        if not run_command(cmd, "Stage 1: Baseline Evaluation", args.dry_run):
+            failed_stages.append("Stage 1")
+    else:
+        print(f"\n⏭️ Skipping Stage 1 (baseline evaluation not needed)")
 
     # =========================================================================
     # STAGE 2: LoRA Fine-tuning
@@ -140,33 +148,38 @@ def main():
     # =========================================================================
     # STAGE 3: Evaluation BASE vs LoRA (both with baseline prompt)
     # =========================================================================
-    # 3a: BASE model
-    cmd = f"""python3 scripts/evaluate_simple.py \\
-        --manifest "{manifest}" \\
-        --prompt "{baseline_prompt}" \\
-        --output_dir "{output_dir}/03_eval_base" \\
-        --batch_size 50"""
+    if not args.skip_baseline_evals:
+        # 3a: BASE model
+        cmd = f"""python3 scripts/evaluate_simple.py \\
+            --manifest "{manifest}" \\
+            --prompt "{baseline_prompt}" \\
+            --output_dir "{output_dir}/03_eval_base" \\
+            --batch_size 50"""
 
-    if not run_command(cmd, "Stage 3a: Evaluate BASE model", args.dry_run):
-        failed_stages.append("Stage 3a")
+        if not run_command(cmd, "Stage 3a: Evaluate BASE model", args.dry_run):
+            failed_stages.append("Stage 3a")
 
-    # 3b: LoRA model
-    cmd = f"""python3 scripts/evaluate_simple.py \\
-        --manifest "{manifest}" \\
-        --prompt "{baseline_prompt}" \\
-        --output_dir "{output_dir}/03_eval_lora" \\
-        --checkpoint "{checkpoint_path}" \\
-        --batch_size 50"""
+        # 3b: LoRA model
+        cmd = f"""python3 scripts/evaluate_simple.py \\
+            --manifest "{manifest}" \\
+            --prompt "{baseline_prompt}" \\
+            --output_dir "{output_dir}/03_eval_lora" \\
+            --checkpoint "{checkpoint_path}" \\
+            --batch_size 50"""
 
-    if not run_command(cmd, "Stage 3b: Evaluate LoRA model", args.dry_run):
-        failed_stages.append("Stage 3b")
+        if not run_command(cmd, "Stage 3b: Evaluate LoRA model", args.dry_run):
+            failed_stages.append("Stage 3b")
+    else:
+        print(f"\n⏭️ Skipping Stage 3 (baseline evaluations not needed)")
 
     # =========================================================================
     # STAGE 4: OPRO on BASE model
     # =========================================================================
     if not args.skip_opro_base:
+        # Use dev CSV for OPRO (same as opro2 jobs)
+        dev_manifest = f"{args.data_root}/processed/variants_validated_1000/dev_metadata.csv"
         cmd = f"""python3 scripts/opro_classic_optimize.py \\
-            --manifest "{manifest}" \\
+            --manifest "{dev_manifest}" \\
             --split dev \\
             --output_dir "{output_dir}/04_opro_base" \\
             --no_lora \\
