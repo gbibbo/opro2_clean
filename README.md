@@ -15,16 +15,47 @@ Este repositorio implementa un pipeline de 7 etapas para optimizar la detección
 
 ## Últimos Resultados Experimentales
 
-### Experimento 1: Pipeline Completo Seed 42 (OPRO Clásico) ✅
+### ⚠️ Corrección Importante (22 diciembre 2025)
 
-**Configuración:**
-- Seed: 42
-- Modelo: Qwen2-Audio-7B-Instruct + LoRA
-- Checkpoint: `checkpoints/qwen_lora_seed42/final`
-- OPRO: 15 iteraciones, 20 muestras por iteración, 8 candidatos
-- Fecha: 15 de diciembre 2025
+El experimento inicial "OPRO Open Prompts" que reportó 0% accuracy NO falló debido a un problema con los prompts abiertos. El problema real fue **infraestructura: CUDA driver initialization failed** dentro del contenedor Apptainer en el nodo aisurrey14. Todas las 21,340 predicciones obtuvieron error de CUDA, no problemas de formato de prompt.
 
-**Mejor Prompt Encontrado:**
+**Solución implementada:**
+- Excluir nodos problemáticos (aisurrey14, aisurrey19)
+- Agregar test de CUDA antes de ejecutar
+- Re-ejecutar stages fallidos individualmente
+
+**Resultado:** Tras corregir el problema de infraestructura, OPRO Open Prompts funciona correctamente y obtiene resultados prácticamente idénticos a OPRO Clásico.
+
+---
+
+### Tabla Comparativa Completa de Configuraciones
+
+**Test Set:** 21,340 muestras | **Seed:** 42 | **Fecha:** 15-22 diciembre 2025
+
+| Configuración | BA_clip | BA_conditions | Speech Acc | Nonspeech Acc | Prompt Optimizado |
+|--------------|---------|---------------|------------|---------------|-------------------|
+| **1. BASE + Prompt Base** | - | - | - | - | *No disponible* |
+| **2. BASE + OPRO Clásico** | 88.12% | 89.34% | 91.64% | 84.60% | Ver abajo ¹ |
+| **3. BASE + OPRO Open** | ⏳ | ⏳ | ⏳ | ⏳ | *En ejecución (Job 2027437)* |
+| **4. LoRA + Prompt Base** | - | - | - | - | *No disponible* |
+| **5. LoRA + OPRO Clásico** | **94.90%** ⭐ | **95.46%** ⭐ | **98.23%** | **91.57%** | Ver abajo ² |
+| **6. LoRA + OPRO Open** | **94.78%** ✅ | **95.32%** ✅ | **98.23%** | **91.34%** | Ver abajo ³ |
+
+**Diferencias clave:**
+- **BASE → LoRA:** +6.66-6.78% BA (beneficio del fine-tuning)
+- **OPRO Clásico vs Open:** Diferencia mínima (0.12% BA) - prácticamente idénticos
+- **Mejor configuración:** LoRA + OPRO (Clásico u Open) con ~95% BA
+
+---
+
+### Prompts Optimizados por OPRO
+
+**¹ Mejor Prompt - BASE + OPRO Clásico:**
+```
+Listen briefly; is this clip human speech or noise? Quickly reply: SPEECH or NON-SPEECH.
+```
+
+**² Mejor Prompt - LoRA + OPRO Clásico:**
 ```
 Decide the dominant content.
 Definitions:
@@ -33,13 +64,22 @@ Definitions:
 Output exactly: SPEECH or NONSPEECH.
 ```
 
-**Métricas Finales (Test Set - 21,340 muestras):**
-- **BA_clip:** 93.02%
-- **BA_conditions:** 93.48%
-- **Speech Accuracy:** 98.35%
-- **Nonspeech Accuracy:** 87.69%
+**³ Mejor Prompt - LoRA + OPRO Open:**
+```
+Decide the dominant content.
+Definitions:
+- SPEECH = human voice, spoken words, syllables, conversational cues.
+- NONSPEECH = music, tones/beeps, environmental noise, silence.
+Output exactly: SPEECH or NONSPEECH.
+```
 
-**Desglose por Dimensión:**
+**Observación:** OPRO Clásico y OPRO Open convergieron al **mismo prompt idéntico** para el modelo LoRA, explicando por qué obtienen resultados casi iguales.
+
+---
+
+### Análisis Detallado: LoRA + OPRO Clásico (Mejor Resultado)
+
+**Desglose por Dimensión Psicoacústica:**
 | Dimensión | BA | Condiciones |
 |-----------|-----|------------|
 | Duration | 89.14% | 8 condiciones (20ms-1000ms) |
@@ -72,68 +112,13 @@ Output exactly: SPEECH or NONSPEECH.
 
 ---
 
-### Experimento 2: Pipeline con OPRO Open Prompts ❌
+### Conclusiones
 
-**Configuración:**
-- Seed: 42
-- Modelo: Qwen2-Audio-7B-Instruct + LoRA
-- Checkpoint: `checkpoints/qwen_lora_seed42/final`
-- OPRO: 15 iteraciones, 20 muestras por iteración, 8 candidatos
-- Modo: Open prompts (sin restricciones de formato)
-- Fecha: 20 de diciembre 2025
-
-**Mejor Prompt Encontrado:**
-```
-Does this audio contain human speech? Answer exactly one token: SPEECH or NONSPEECH.
-```
-
-**Métricas Finales (Test Set - 21,340 muestras):**
-- **BA_clip:** 0.00% ❌
-- **BA_conditions:** 0.00% ❌
-- **Speech Accuracy:** 0.00% ❌
-- **Nonspeech Accuracy:** 0.00% ❌
-
-**Análisis del Fracaso:**
-
-El experimento con prompts abiertos falló completamente. Análisis de las 121 evaluaciones:
-- **Todas las iteraciones obtuvieron 0% accuracy**
-- El modelo no logró generar respuestas válidas ("SPEECH" o "NONSPEECH")
-- Los prompts generados fueron variados pero ninguno funcionó:
-  - Prompts con ejemplos
-  - Prompts con definiciones técnicas (formants, syllabic rhythm)
-  - Prompts con diferentes formatos de instrucción
-  - Prompts con XML-style tags
-
-**Prompts generados (muestra):**
-1. "Does this audio contain human speech? Answer exactly one token: SPEECH or NONSPEECH." → 0%
-2. "Binary decision. Output exactly one token: SPEECH or NONSPEECH." → 0%
-3. "Decide the dominant content.\nDefinitions:\n- SPEECH = human voice, spoken words, syllables, conversational cues.\n- NONSPEECH = music, tones/beeps, environmental noise, silence.\nOutput exactly: SPEECH or NONSPEECH." → 0%
-4. "Focus on cues of human vocal tract (formants, syllabic rhythm, consonant onsets).\nAnswer exactly: SPEECH or NONSPEECH." → 0%
-5. "You will answer with one token only.\n<question>Does this audio contain human speech?</question>\n<answer>SPEECH or NONSPEECH only</answer>" → 0%
-
-**Hipótesis sobre el fracaso:**
-1. **Problema de normalización:** Los prompts open pueden haber generado respuestas que el sistema de normalización no procesó correctamente
-2. **Problema de formato:** El modelo puede haber generado respuestas en un formato no esperado por el evaluador
-3. **Problema de configuración:** Puede haber un bug en el script `opro_open_prompts.py` que no se detectó
-4. **Incompatibilidad con el checkpoint:** El checkpoint LoRA puede requerir un formato específico de prompt que los prompts abiertos no respetan
-
-**Recomendaciones:**
-- ✅ Usar OPRO clásico (con restricciones de formato) que demostró excelentes resultados (93% BA)
-- ❌ No usar OPRO open prompts hasta investigar y corregir el problema
-- 🔍 Investigar el sistema de normalización en `src/qsm/utils/normalize.py`
-- 🔍 Revisar el script `scripts/opro_open_prompts.py` para detectar posibles bugs
-
----
-
-## Comparativa de Experimentos
-
-| Experimento | BA_clip | Speech Acc | Nonspeech Acc | Status |
-|-------------|---------|------------|---------------|--------|
-| OPRO Clásico (seed 42) | **93.02%** | **98.35%** | **87.69%** | ✅ Exitoso |
-| OPRO Open Prompts (seed 42) | 0.00% | 0.00% | 0.00% | ❌ Fallido |
-| Diferencia | -93.02% | -98.35% | -87.69% | - |
-
-**Conclusión:** El enfoque clásico de OPRO con restricciones de formato es significativamente superior al enfoque de prompts abiertos, que falló completamente.
+1. **LoRA es esencial:** El fine-tuning mejora +6.66% BA sobre el modelo base
+2. **OPRO funciona muy bien:** Optimización de prompts mejora significativamente el rendimiento
+3. **OPRO Clásico ≈ OPRO Open:** No hay diferencia práctica (0.12% BA), ambos convergen al mismo prompt
+4. **Duración corta es el desafío:** Clips <100ms tienen peor rendimiento (80-90% BA)
+5. **SNR muy robusto:** Excelente rendimiento incluso a -10dB (97% BA)
 
 ---
 
@@ -299,13 +284,25 @@ lora:
 
 ## Archivos de Resultados
 
-### Experimento 1 (Exitoso)
+### BASE + OPRO Clásico
+
+- **Historia de optimización:** [results/complete_pipeline_seed42/04_opro_base/optimization_history.json](results/complete_pipeline_seed42/04_opro_base/optimization_history.json) *(parcial)*
+- **Mejor prompt:** [results/complete_pipeline_seed42/04_opro_base/best_prompt.txt](results/complete_pipeline_seed42/04_opro_base/best_prompt.txt)
+- **Métricas finales:** [results/complete_pipeline_seed42/06_eval_base_opro/metrics.json](results/complete_pipeline_seed42/06_eval_base_opro/metrics.json)
+
+### BASE + OPRO Open
+
+- **Historia de optimización:** [results/complete_pipeline_seed42_opro_open/04_opro_base/optimization_history.json](results/complete_pipeline_seed42_opro_open/04_opro_base/optimization_history.json) *(en ejecución)*
+- **Mejor prompt:** [results/complete_pipeline_seed42_opro_open/04_opro_base/best_prompt.txt](results/complete_pipeline_seed42_opro_open/04_opro_base/best_prompt.txt) *(pendiente)*
+- **Métricas finales:** [results/complete_pipeline_seed42_opro_open/06_eval_base_opro/metrics.json](results/complete_pipeline_seed42_opro_open/06_eval_base_opro/metrics.json) *(pendiente)*
+
+### LoRA + OPRO Clásico (Mejor configuración)
 
 - **Historia de optimización:** [results/complete_pipeline_seed42/05_opro_lora/optimization_history.json](results/complete_pipeline_seed42/05_opro_lora/optimization_history.json)
 - **Mejor prompt:** [results/complete_pipeline_seed42/05_opro_lora/best_prompt.txt](results/complete_pipeline_seed42/05_opro_lora/best_prompt.txt)
-- **Métricas finales:** [results/complete_pipeline_seed42/03_eval_lora/metrics.json](results/complete_pipeline_seed42/03_eval_lora/metrics.json)
+- **Métricas finales:** [results/complete_pipeline_seed42/07_eval_lora_opro/metrics.json](results/complete_pipeline_seed42/07_eval_lora_opro/metrics.json)
 
-### Experimento 2 (Fallido)
+### LoRA + OPRO Open (Resultado casi idéntico)
 
 - **Historia de optimización:** [results/complete_pipeline_seed42_opro_open/05_opro_lora/optimization_history.json](results/complete_pipeline_seed42_opro_open/05_opro_lora/optimization_history.json)
 - **Mejor prompt:** [results/complete_pipeline_seed42_opro_open/05_opro_lora/best_prompt.txt](results/complete_pipeline_seed42_opro_open/05_opro_lora/best_prompt.txt)
@@ -358,20 +355,23 @@ ls -la checkpoints/qwen_lora_seed42/final/
 
 ### Investigaciones Pendientes
 
-1. **Debuggear OPRO Open Prompts:**
-   - Revisar sistema de normalización en `src/qsm/utils/normalize.py`
-   - Verificar compatibilidad con checkpoint LoRA
-   - Añadir logging detallado para entender por qué falla
-
-2. **Optimizaciones Posibles:**
-   - Probar con diferentes seeds (43, 44, 45)
+1. **Optimizaciones Posibles:**
+   - Probar con diferentes seeds (43, 44, 45) para validar reproducibilidad
    - Experimentar con diferentes configuraciones de LoRA (r=32, r=128)
    - Probar otros LLMs para OPRO (Llama, Mistral)
+   - Evaluar con prompt base (sin OPRO) para cuantificar beneficio de optimización
 
-3. **Análisis de Errores:**
-   - Investigar por qué duration corta tiene peor rendimiento
-   - Analizar muestras mal clasificadas en nonspeech
+2. **Análisis de Errores:**
+   - **Investigar por qué duration corta (<100ms) tiene peor rendimiento**
+     - Hipótesis: Clips muy cortos no proveen suficiente contexto temporal
+     - Posible solución: Prompt especializado para duraciones cortas
+   - Analizar muestras mal clasificadas en nonspeech (8.43% error)
    - Estudiar confusiones específicas por condición
+
+3. **Infraestructura:**
+   - ✅ **RESUELTO:** Problema de CUDA en nodos aisurrey14/aisurrey19
+   - Documentar nodos confiables para futuros experimentos
+   - Considerar migrar a contenedor actualizado si persisten problemas
 
 ---
 
@@ -388,6 +388,6 @@ Para preguntas o problemas:
 
 ---
 
-**Última actualización:** 21 de diciembre 2025
-**Versión:** 2.0
-**Status:** 🟢 OPRO Clásico funcional | 🔴 OPRO Open Prompts requiere debugging
+**Última actualización:** 22 de diciembre 2025
+**Versión:** 3.0
+**Status:** 🟢 Pipeline completo funcional | ✅ OPRO Clásico y Open Prompts validados | ⏳ Completando experimentos BASE + OPRO Open
