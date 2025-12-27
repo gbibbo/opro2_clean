@@ -1,18 +1,19 @@
 #!/bin/bash
-#SBATCH --job-name=fix_stage4_opro_base
+#SBATCH --job-name=opro_varied_base
 #SBATCH --partition=3090
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=48G
-#SBATCH --time=04:00:00
+#SBATCH --time=05:00:00
 #SBATCH --exclude=aisurrey14,aisurrey19
-#SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/fix_stage4_%j.out
-#SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/fix_stage4_%j.err
+#SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/opro_varied_base_%j.out
+#SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/opro_varied_base_%j.err
 
 # =============================================================================
-# FIX Stage 4: OPRO Open on BASE Model (Re-execution)
+# OPRO with Varied Seed Prompts on BASE Model
 # =============================================================================
-# Ejecuta OPRO con open-ended prompts en el modelo BASE (sin LoRA)
+# Executes OPRO with 15 diverse seed prompts (descriptive, binary, with
+# definitions, with examples, multiple choice, etc.) on the BASE model
 # =============================================================================
 
 set -euo pipefail
@@ -24,9 +25,12 @@ CONTAINER="$REPO_DATA/qwen_pipeline_v2.sif"
 SEED=42
 
 echo "[INFO] ========================================================================"
-echo "[INFO] FIX STAGE 4: OPRO Open on BASE - INICIO: $(date)"
+echo "[INFO] OPRO with Varied Seeds - BASE Model - INICIO: $(date)"
 echo "[INFO] ========================================================================"
 echo "[INFO] Seed: $SEED"
+echo "[INFO] Samples per iteration: 30"
+echo "[INFO] Decoding mode: open (allows free-form answers)"
+echo "[INFO] Seed prompts: 15 varied templates"
 echo "[INFO] GPU Info:"
 nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
 echo "[INFO] Node: $(hostname)"
@@ -44,8 +48,9 @@ export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 
 # Rutas
 DATA_ROOT="$REPO_DATA/data"
-OUTPUT_DIR="results/complete_pipeline_seed${SEED}_opro_open/04_opro_base"
+OUTPUT_DIR="results/opro_varied_seed${SEED}/base"
 DEV_CSV="$DATA_ROOT/processed/experimental_variants/dev_metadata.csv"
+SEEDS_FILE="$REPO_CLEAN/prompts/open_descriptive_seeds.json"
 
 # Verificar container
 if [ ! -f "$CONTAINER" ]; then
@@ -53,8 +58,14 @@ if [ ! -f "$CONTAINER" ]; then
     exit 1
 fi
 
+# Verificar seeds file
+if [ ! -f "$SEEDS_FILE" ]; then
+    echo "[ERROR] Seeds file not found: $SEEDS_FILE"
+    exit 1
+fi
+
 # Limpiar output anterior
-echo "[INFO] Limpiando output anterior..."
+echo "[INFO] Preparando directorio de salida..."
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
@@ -85,11 +96,29 @@ if [ $CUDA_TEST_EXIT -ne 0 ]; then
     exit 1
 fi
 
-echo "[INFO] ✓ CUDA test passed. Proceeding with Stage 4..."
+echo "[INFO] ✓ CUDA test passed. Proceeding with OPRO..."
 
-# Ejecutar Stage 4: OPRO Open en modelo BASE
+# Ejecutar OPRO con prompts variados
 echo "[INFO] ========================================================================"
-echo "[INFO] Ejecutando Stage 4: OPRO Open on BASE model"
+echo "[INFO] Ejecutando OPRO con 15 prompts semilla variados"
+echo "[INFO] ========================================================================"
+echo "[INFO]"
+echo "[INFO] Características:"
+echo "[INFO]   - Modelo: BASE (sin LoRA)"
+echo "[INFO]   - Iteraciones: 15"
+echo "[INFO]   - Muestras por iteración: 30"
+echo "[INFO]   - Candidatos por iteración: 8"
+echo "[INFO]   - Decoding mode: open (permite respuestas libres)"
+echo "[INFO]   - Templates semilla: 15 prompts con máxima variedad"
+echo "[INFO]"
+echo "[INFO] Tipos de prompts incluidos:"
+echo "[INFO]   - Descriptivos abiertos (e.g., 'What do you hear?')"
+echo "[INFO]   - Binarios directos (e.g., 'SPEECH or NONSPEECH?')"
+echo "[INFO]   - Con definiciones (e.g., 'SPEECH means human voice...')"
+echo "[INFO]   - Con ejemplos (e.g., 'Example: beeping → NONSPEECH')"
+echo "[INFO]   - Multiple choice (e.g., 'A) Speech or B) Other?')"
+echo "[INFO]   - YES/NO format"
+echo "[INFO]   - Técnicos y ultra-cortos"
 echo "[INFO] ========================================================================"
 
 apptainer exec --nv \
@@ -103,15 +132,17 @@ apptainer exec --nv \
         --train_csv "$DEV_CSV" \
         --output_dir "$OUTPUT_DIR" \
         --num_iterations 15 \
-        --samples_per_iter 20 \
+        --samples_per_iter 30 \
         --num_candidates 8 \
-        --seed "$SEED"
+        --seed "$SEED" \
+        --decoding open \
+        --templates_file "$SEEDS_FILE"
 
 EXIT_CODE=$?
 
 echo "[INFO] ========================================================================"
 if [ $EXIT_CODE -eq 0 ]; then
-    echo "[INFO] ✓ Stage 4 COMPLETED SUCCESSFULLY"
+    echo "[INFO] ✓ OPRO VARIED (BASE) COMPLETED SUCCESSFULLY"
     echo "[INFO] Output: $OUTPUT_DIR"
     echo "[INFO] Best prompt: $OUTPUT_DIR/best_prompt.txt"
     if [ -f "$OUTPUT_DIR/best_prompt.txt" ]; then
@@ -119,7 +150,7 @@ if [ $EXIT_CODE -eq 0 ]; then
         cat "$OUTPUT_DIR/best_prompt.txt"
     fi
 else
-    echo "[ERROR] ✗ Stage 4 FAILED (Exit code: $EXIT_CODE)"
+    echo "[ERROR] ✗ OPRO VARIED (BASE) FAILED (Exit code: $EXIT_CODE)"
 fi
 echo "[INFO] FIN: $(date)"
 echo "[INFO] ========================================================================"

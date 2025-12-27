@@ -1,0 +1,69 @@
+#!/bin/bash
+#SBATCH --job-name=psycho_remaining
+#SBATCH --partition=3090
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=64G
+#SBATCH --time=48:00:00
+#SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/psychometric_remaining_%j.out
+#SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/psychometric_remaining_%j.err
+
+# =============================================================================
+# Psychometric Analysis - Remaining 2 Configurations
+# =============================================================================
+# Processes only the configs that timed out in the previous run
+# Usage: sbatch slurm/psychometric_remaining.job
+# =============================================================================
+
+set -euo pipefail
+set -x
+
+REPO_CLEAN="/mnt/fast/nobackup/users/gb0048/opro2_clean"
+REPO_DATA="/mnt/fast/nobackup/users/gb0048/opro2"
+CONTAINER="$REPO_DATA/qwen_pipeline_v2.sif"
+
+echo "========================================================================"
+echo "Psychometric Analysis - Remaining Configurations"
+echo "========================================================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURMD_NODENAME"
+echo "Start time: $(date)"
+echo ""
+
+cd "$REPO_CLEAN"
+mkdir -p logs
+mkdir -p results/psychometric_analysis
+
+echo "Processing remaining configurations:"
+echo "  - Base + OPRO (Varied seeds)"
+echo "  - LoRA + OPRO (Varied seeds)"
+echo ""
+echo "  Bootstrap samples: 2,000"
+echo "  Random seed: 42"
+echo "  Output: results/psychometric_analysis/"
+echo ""
+
+apptainer exec \
+  --pwd "$REPO_CLEAN" \
+  "$CONTAINER" python3 scripts/compute_psychometric.py \
+  --configs base_opro_varied lora_opro_varied \
+  --output_dir results/psychometric_analysis \
+  --n_bootstrap 2000 \
+  --seed 42
+
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "========================================================================"
+    echo "Psychometric Analysis (Remaining) COMPLETED"
+    echo "========================================================================"
+    echo "Results saved to: results/psychometric_analysis/"
+    echo "  - base_opro_varied_psychometric.json"
+    echo "  - lora_opro_varied_psychometric.json"
+    echo ""
+    echo "End time: $(date)"
+else
+    echo ""
+    echo "ERROR: Psychometric analysis failed with exit code ${EXIT_CODE}"
+    exit ${EXIT_CODE}
+fi

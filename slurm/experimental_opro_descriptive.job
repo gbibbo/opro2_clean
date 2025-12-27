@@ -1,18 +1,19 @@
 #!/bin/bash
-#SBATCH --job-name=fix_stage4_opro_base
+#SBATCH --job-name=opro_descriptive
 #SBATCH --partition=3090
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=48G
-#SBATCH --time=04:00:00
+#SBATCH --time=05:00:00
 #SBATCH --exclude=aisurrey14,aisurrey19
-#SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/fix_stage4_%j.out
-#SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/fix_stage4_%j.err
+#SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/opro_descriptive_%j.out
+#SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/opro_descriptive_%j.err
 
 # =============================================================================
-# FIX Stage 4: OPRO Open on BASE Model (Re-execution)
+# EXPERIMENTAL: OPRO with Open Descriptive Prompts on BASE Model
 # =============================================================================
-# Ejecuta OPRO con open-ended prompts en el modelo BASE (sin LoRA)
+# Tests prompts like "What do you hear in this audio?" that encourage
+# descriptive answers like "I hear voices in a rural environment"
 # =============================================================================
 
 set -euo pipefail
@@ -24,9 +25,12 @@ CONTAINER="$REPO_DATA/qwen_pipeline_v2.sif"
 SEED=42
 
 echo "[INFO] ========================================================================"
-echo "[INFO] FIX STAGE 4: OPRO Open on BASE - INICIO: $(date)"
+echo "[INFO] EXPERIMENTAL OPRO: Open Descriptive Prompts - INICIO: $(date)"
 echo "[INFO] ========================================================================"
 echo "[INFO] Seed: $SEED"
+echo "[INFO] Samples per iteration: 30 (increased from default 20)"
+echo "[INFO] Decoding mode: open (allows free-form answers)"
+echo "[INFO] Seed prompts: prompts/open_descriptive_seeds.json"
 echo "[INFO] GPU Info:"
 nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
 echo "[INFO] Node: $(hostname)"
@@ -44,8 +48,9 @@ export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 
 # Rutas
 DATA_ROOT="$REPO_DATA/data"
-OUTPUT_DIR="results/complete_pipeline_seed${SEED}_opro_open/04_opro_base"
+OUTPUT_DIR="results/experimental_opro_descriptive_seed${SEED}/base"
 DEV_CSV="$DATA_ROOT/processed/experimental_variants/dev_metadata.csv"
+SEEDS_FILE="$REPO_CLEAN/prompts/open_descriptive_seeds.json"
 
 # Verificar container
 if [ ! -f "$CONTAINER" ]; then
@@ -53,8 +58,14 @@ if [ ! -f "$CONTAINER" ]; then
     exit 1
 fi
 
+# Verificar seeds file
+if [ ! -f "$SEEDS_FILE" ]; then
+    echo "[ERROR] Seeds file not found: $SEEDS_FILE"
+    exit 1
+fi
+
 # Limpiar output anterior
-echo "[INFO] Limpiando output anterior..."
+echo "[INFO] Preparando directorio de salida..."
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
@@ -85,11 +96,29 @@ if [ $CUDA_TEST_EXIT -ne 0 ]; then
     exit 1
 fi
 
-echo "[INFO] ✓ CUDA test passed. Proceeding with Stage 4..."
+echo "[INFO] ✓ CUDA test passed. Proceeding with experimental OPRO..."
 
-# Ejecutar Stage 4: OPRO Open en modelo BASE
+# Ejecutar OPRO con prompts descriptivos
 echo "[INFO] ========================================================================"
-echo "[INFO] Ejecutando Stage 4: OPRO Open on BASE model"
+echo "[INFO] Ejecutando OPRO con prompts descriptivos abiertos"
+echo "[INFO] ========================================================================"
+echo "[INFO]"
+echo "[INFO] Características del experimento:"
+echo "[INFO]   - Modelo: BASE (sin LoRA)"
+echo "[INFO]   - Iteraciones: 15"
+echo "[INFO]   - Muestras por iteración: 30 (vs 20 en experimentos anteriores)"
+echo "[INFO]   - Candidatos por iteración: 8"
+echo "[INFO]   - Decoding mode: open (permite respuestas libres)"
+echo "[INFO]   - Templates semilla: open_descriptive_seeds.json"
+echo "[INFO]"
+echo "[INFO] Ejemplos de prompts semilla:"
+echo "[INFO]   - 'What do you hear in this audio?'"
+echo "[INFO]   - 'Describe what you hear in this audio clip.'"
+echo "[INFO]   - 'Listen carefully. What is the dominant sound?'"
+echo "[INFO]"
+echo "[INFO] Objetivo: Permitir que el modelo responda naturalmente,"
+echo "[INFO]           por ejemplo: 'I hear voices in a rural environment'"
+echo "[INFO]           Sistema de normalización clasificará basado en sinónimos"
 echo "[INFO] ========================================================================"
 
 apptainer exec --nv \
@@ -103,23 +132,30 @@ apptainer exec --nv \
         --train_csv "$DEV_CSV" \
         --output_dir "$OUTPUT_DIR" \
         --num_iterations 15 \
-        --samples_per_iter 20 \
+        --samples_per_iter 30 \
         --num_candidates 8 \
-        --seed "$SEED"
+        --seed "$SEED" \
+        --decoding open \
+        --templates_file "$SEEDS_FILE"
 
 EXIT_CODE=$?
 
 echo "[INFO] ========================================================================"
 if [ $EXIT_CODE -eq 0 ]; then
-    echo "[INFO] ✓ Stage 4 COMPLETED SUCCESSFULLY"
+    echo "[INFO] ✓ EXPERIMENTAL OPRO COMPLETED SUCCESSFULLY"
     echo "[INFO] Output: $OUTPUT_DIR"
     echo "[INFO] Best prompt: $OUTPUT_DIR/best_prompt.txt"
     if [ -f "$OUTPUT_DIR/best_prompt.txt" ]; then
         echo "[INFO] Best prompt content:"
         cat "$OUTPUT_DIR/best_prompt.txt"
     fi
+    echo "[INFO]"
+    echo "[INFO] Next steps:"
+    echo "[INFO]   1. Review optimization history: $OUTPUT_DIR/optimization_history.json"
+    echo "[INFO]   2. Evaluate best prompt on test set"
+    echo "[INFO]   3. Compare with traditional OPRO approaches"
 else
-    echo "[ERROR] ✗ Stage 4 FAILED (Exit code: $EXIT_CODE)"
+    echo "[ERROR] ✗ EXPERIMENTAL OPRO FAILED (Exit code: $EXIT_CODE)"
 fi
 echo "[INFO] FIN: $(date)"
 echo "[INFO] ========================================================================"

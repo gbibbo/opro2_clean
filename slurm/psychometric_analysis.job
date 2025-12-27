@@ -1,0 +1,67 @@
+#!/bin/bash
+#SBATCH --job-name=psychometric
+#SBATCH --partition=3090
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=64G
+#SBATCH --time=48:00:00
+#SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/psychometric_analysis_%j.out
+#SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/psychometric_analysis_%j.err
+
+# =============================================================================
+# Psychometric Analysis - All Configurations
+# =============================================================================
+# Computes DT50/75/90 and SNR-75 with bootstrap CIs for all configurations
+# Usage: sbatch slurm/psychometric_analysis.job
+# =============================================================================
+
+set -euo pipefail
+set -x
+
+REPO_CLEAN="/mnt/fast/nobackup/users/gb0048/opro2_clean"
+REPO_DATA="/mnt/fast/nobackup/users/gb0048/opro2"
+CONTAINER="$REPO_DATA/qwen_pipeline_v2.sif"
+
+echo "========================================================================"
+echo "Psychometric Analysis - All Configurations"
+echo "========================================================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURMD_NODENAME"
+echo "Start time: $(date)"
+echo ""
+
+cd "$REPO_CLEAN"
+mkdir -p logs
+mkdir -p results/psychometric_analysis
+
+echo "Running psychometric analysis..."
+echo "  Bootstrap samples: 2,000"
+echo "  Random seed: 42"
+echo "  Output: results/psychometric_analysis/"
+echo ""
+
+apptainer exec \
+  --pwd "$REPO_CLEAN" \
+  "$CONTAINER" python3 scripts/compute_psychometric.py \
+  --all \
+  --output_dir results/psychometric_analysis \
+  --n_bootstrap 2000 \
+  --seed 42
+
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "========================================================================"
+    echo "Psychometric Analysis COMPLETED"
+    echo "========================================================================"
+    echo "Results saved to: results/psychometric_analysis/"
+    echo "  - all_psychometric_thresholds.json (combined)"
+    echo "  - psychometric_report.txt (human-readable)"
+    echo "  - <config>_psychometric.json (individual configs)"
+    echo ""
+    echo "End time: $(date)"
+else
+    echo ""
+    echo "ERROR: Psychometric analysis failed with exit code ${EXIT_CODE}"
+    exit ${EXIT_CODE}
+fi

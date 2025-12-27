@@ -1,0 +1,45 @@
+#!/bin/bash
+#SBATCH --job-name=diagnose_base
+#SBATCH --partition=3090
+#SBATCH --gpus=1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16G
+#SBATCH --time=00:30:00
+#SBATCH --exclude=aisurrey14,aisurrey19
+#SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/diagnose_base_%j.out
+#SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/diagnose_base_%j.err
+
+set -euo pipefail
+set -x
+
+REPO_CLEAN="/mnt/fast/nobackup/users/gb0048/opro2_clean"
+REPO_DATA="/mnt/fast/nobackup/users/gb0048/opro2"
+CONTAINER="$REPO_DATA/qwen_pipeline_v2.sif"
+
+echo "========================================================================"
+echo "DIAGNOSE: BASE Model Responses on NONSPEECH Samples"
+echo "========================================================================"
+echo "Start: $(date)"
+
+cd "$REPO_CLEAN"
+
+# Configure HuggingFace cache
+export HF_HOME="/mnt/fast/nobackup/users/gb0048/.cache/huggingface"
+export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+export HF_HUB_CACHE="$HF_HOME/hub"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE"
+
+export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+
+# Run diagnostic script
+apptainer exec --nv \
+    --pwd "$REPO_CLEAN" \
+    --env HF_HOME="$HF_HOME" \
+    --env TRANSFORMERS_CACHE="$TRANSFORMERS_CACHE" \
+    --env HF_HUB_CACHE="$HF_HUB_CACHE" \
+    --env PYTORCH_CUDA_ALLOC_CONF="$PYTORCH_CUDA_ALLOC_CONF" \
+    "$CONTAINER" python3 scripts/diagnose_base_nonspeech.py
+
+echo "========================================================================"
+echo "End: $(date)"
+echo "========================================================================"

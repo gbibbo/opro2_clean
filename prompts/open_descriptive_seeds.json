@@ -1,0 +1,66 @@
+{
+  "format": "open",
+  "label_space": ["SPEECH", "NONSPEECH"],
+  "templates": [
+    {
+      "text": "What do you hear in this audio?",
+      "description": "Open-ended descriptive question"
+    },
+    {
+      "text": "Describe what you hear in this audio clip.",
+      "description": "Instruction-based descriptive prompt"
+    },
+    {
+      "text": "Does this audio contain human speech? Answer SPEECH or NONSPEECH.",
+      "description": "Binary question with explicit format"
+    },
+    {
+      "text": "Classify this audio. Output only: SPEECH or NONSPEECH.",
+      "description": "Direct classification instruction"
+    },
+    {
+      "text": "Listen carefully. SPEECH means human voice or talking. NONSPEECH means music, noise, or silence. What is this?",
+      "description": "Prompt with definitions"
+    },
+    {
+      "text": "Decide the dominant content. If human voice is present, say SPEECH. Otherwise, say NONSPEECH.",
+      "description": "Conditional instruction"
+    },
+    {
+      "text": "Example: beeping sounds → NONSPEECH. Example: person talking → SPEECH. Now classify this audio:",
+      "description": "Few-shot learning approach"
+    },
+    {
+      "text": "Is there human speech in this recording? Reply with one word: SPEECH or NONSPEECH.",
+      "description": "Question format with one-word constraint"
+    },
+    {
+      "text": "Audio classification task. Detect if human vocal tract sounds are present. Answer: SPEECH or NONSPEECH.",
+      "description": "Technical framing with vocal tract reference"
+    },
+    {
+      "text": "Listen. Does this contain: A) Human speech, or B) Other sounds? Output A or B.",
+      "description": "Multiple choice format with letters"
+    },
+    {
+      "text": "Speech detection: YES if human voice detected, NO otherwise.",
+      "description": "Binary YES/NO format"
+    },
+    {
+      "text": "Analyze the acoustic content. If you identify human voice, speaking, or conversation, output SPEECH. For music, tones, noise, or silence, output NONSPEECH.",
+      "description": "Detailed instruction with examples"
+    },
+    {
+      "text": "What is the primary sound source in this audio clip?",
+      "description": "Ultra-open question without format constraints"
+    },
+    {
+      "text": "TASK: Binary classification. LABELS: SPEECH (human voice) or NONSPEECH (all other sounds). AUDIO:",
+      "description": "Structured task format"
+    },
+    {
+      "text": "Quick check: human speech present? SPEECH or NONSPEECH.",
+      "description": "Ultra-short direct format"
+    }
+  ]
+}

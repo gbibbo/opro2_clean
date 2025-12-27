@@ -1,0 +1,89 @@
+#!/bin/bash
+#SBATCH --job-name=stats_analysis
+#SBATCH --output=logs/08_statistical_analysis_%j.out
+#SBATCH --error=logs/08_statistical_analysis_%j.err
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=64G
+#SBATCH --time=04:00:00
+
+# Statistical Analysis Job
+# Runs rigorous statistical analysis on all model predictions
+# Usage: sbatch slurm/08_statistical_analysis.job [SEED]
+
+SEED=${1:-42}
+
+echo "========================================================================"
+echo "Statistical Analysis - Seed ${SEED}"
+echo "========================================================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURMD_NODENAME"
+echo "Start time: $(date)"
+echo ""
+
+# Activate environment
+source ~/.bashrc
+conda activate opro2 || { echo "Failed to activate conda environment"; exit 1; }
+
+# Project root
+cd /mnt/fast/nobackup/users/gb0048/opro2_clean || exit 1
+
+# Results directory
+RESULTS_DIR="results/complete_pipeline_seed${SEED}"
+OUTPUT_DIR="${RESULTS_DIR}/08_statistical_analysis"
+
+echo "Results directory: ${RESULTS_DIR}"
+echo "Output directory: ${OUTPUT_DIR}"
+echo ""
+
+# Check if prediction files exist
+BASELINE="${RESULTS_DIR}/01_baseline/predictions.csv"
+BASE_OPRO="${RESULTS_DIR}/06_eval_base_opro/predictions.csv"
+LORA="${RESULTS_DIR}/03_eval_lora/predictions.csv"
+LORA_OPRO="${RESULTS_DIR}/07_eval_lora_opro/predictions.csv"
+
+echo "Checking prediction files..."
+for FILE in "$BASELINE" "$BASE_OPRO" "$LORA" "$LORA_OPRO"; do
+    if [ -f "$FILE" ]; then
+        echo "  ✓ Found: $FILE"
+    else
+        echo "  ✗ Missing: $FILE"
+        echo "ERROR: Required prediction file not found!"
+        exit 1
+    fi
+done
+echo ""
+
+# Run statistical analysis
+echo "Running statistical analysis..."
+echo "  Bootstrap resamples: 10,000"
+echo "  Random seed: ${SEED}"
+echo ""
+
+python scripts/statistical_analysis.py \
+    --baseline "${BASELINE}" \
+    --base_opro "${BASE_OPRO}" \
+    --lora "${LORA}" \
+    --lora_opro "${LORA_OPRO}" \
+    --output_dir "${OUTPUT_DIR}" \
+    --n_bootstrap 10000 \
+    --seed ${SEED}
+
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "========================================================================"
+    echo "Statistical Analysis COMPLETED"
+    echo "========================================================================"
+    echo "Results saved to: ${OUTPUT_DIR}"
+    echo "  - statistical_analysis.json (machine-readable)"
+    echo "  - statistical_report.txt (human-readable)"
+    echo ""
+    echo "End time: $(date)"
+else
+    echo ""
+    echo "ERROR: Statistical analysis failed with exit code ${EXIT_CODE}"
+    exit ${EXIT_CODE}
+fi
