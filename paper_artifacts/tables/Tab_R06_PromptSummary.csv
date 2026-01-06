@@ -1,0 +1,5 @@
+config,length_chars,has_definitions,prompt_preview
+baseline,65,False,Does this audio contain human speech? Answer SPEECH or NONSPEECH.
+base_opro,87,False,Listen briefly; is this clip human speech or noise? Quickly reply: SPEECH or NON...
+lora,65,False,Does this audio contain human speech? Answer SPEECH or NONSPEECH.
+lora_opro,212,True,"Decide the dominant content. Definitions: - SPEECH = human voice, spoken words, ..."

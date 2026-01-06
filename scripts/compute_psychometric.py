@@ -19,10 +19,13 @@ Usage:
     python compute_psychometric.py --configs base_opro_varied lora_opro_varied
 """
 
+import hashlib
 import json
 import sys
 from pathlib import Path
 from datetime import datetime
+
+import pandas as pd
 
 # Add scripts to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -81,6 +84,35 @@ CONFIGURATIONS = {
         'type': 'lora_opro_varied'
     },
 }
+
+
+def compute_fingerprint(csv_path: str) -> str:
+    """
+    Compute a reproducible fingerprint for a predictions CSV.
+
+    Uses hash of sorted (audio_path, ground_truth, prediction) tuples
+    to detect if two configurations use identical data.
+
+    Args:
+        csv_path: Path to predictions.csv
+
+    Returns:
+        SHA256 hash (first 16 chars) of the data
+    """
+    df = pd.read_csv(csv_path)
+
+    # Sort by audio_path to ensure reproducibility
+    df = df.sort_values('audio_path').reset_index(drop=True)
+
+    # Create canonical string
+    data_str = '|'.join(
+        f"{row['audio_path']}|{row['ground_truth']}|{row['prediction']}"
+        for _, row in df.iterrows()
+    )
+
+    # Compute hash
+    hash_obj = hashlib.sha256(data_str.encode('utf-8'))
+    return hash_obj.hexdigest()[:16]
 
 
 def compute_all_metrics(df, config_name, n_bootstrap=10000, random_state=42):
@@ -221,6 +253,7 @@ Available configurations:
     # Process selected configurations
     all_results = {}
     skipped_configs = []
+    fingerprints = {}  # Track fingerprints to detect duplicates
 
     for config_key in configs_to_process:
         config_info = CONFIGURATIONS[config_key]
@@ -233,8 +266,20 @@ Available configurations:
             skipped_configs.append(config_key)
             continue
 
-        # Load data
+        # Compute fingerprint BEFORE loading (faster, reads raw CSV)
         print(f"\nLoading {config_name}...")
+        fingerprint = compute_fingerprint(str(csv_path))
+
+        # Check for duplicates
+        duplicate_of = None
+        if fingerprint in fingerprints:
+            duplicate_of = fingerprints[fingerprint]
+            print(f"  ⚠️  WARNING: Identical data to '{duplicate_of}'")
+            print(f"  Fingerprint: {fingerprint}")
+        else:
+            fingerprints[fingerprint] = config_key
+
+        # Load data
         df = load_predictions(str(csv_path))
         print(f"  Loaded {len(df)} samples ({df['clip_id'].nunique()} unique clips)")
 
@@ -250,6 +295,11 @@ Available configurations:
         results['config_name'] = config_name
         results['config_type'] = config_info['type']
         results['csv_path'] = str(csv_path)
+        results['fingerprint'] = fingerprint
+
+        # Add duplicate flag if detected
+        if duplicate_of is not None:
+            results['duplicate_of'] = duplicate_of
 
         all_results[config_key] = results
 

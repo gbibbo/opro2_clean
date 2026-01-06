@@ -1,0 +1,36 @@
+================================================================================
+PROMPT ANALYSIS - FULL PROMPTS BY CONFIGURATION
+================================================================================
+
+--------------------------------------------------------------------------------
+Configuration: baseline
+Length: 65 characters
+Has explicit definitions: No
+--------------------------------------------------------------------------------
+Does this audio contain human speech? Answer SPEECH or NONSPEECH.
+
+--------------------------------------------------------------------------------
+Configuration: base_opro
+Length: 87 characters
+Has explicit definitions: No
+--------------------------------------------------------------------------------
+Listen briefly; is this clip human speech or noise? Quickly reply: SPEECH or NONSPEECH.
+
+--------------------------------------------------------------------------------
+Configuration: lora
+Length: 65 characters
+Has explicit definitions: No
+--------------------------------------------------------------------------------
+Does this audio contain human speech? Answer SPEECH or NONSPEECH.
+
+--------------------------------------------------------------------------------
+Configuration: lora_opro
+Length: 212 characters
+Has explicit definitions: Yes
+--------------------------------------------------------------------------------
+Decide the dominant content.
+Definitions:
+- SPEECH = human voice, spoken words, syllables, conversational cues.
+- NONSPEECH = music, tones/beeps, environmental noise, silence.
+Output exactly: SPEECH or NONSPEECH.
+

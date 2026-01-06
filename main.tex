@@ -1,0 +1,825 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[english]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{graphicx}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage{url}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{enumitem}
+
+\begin{document}
+
+\title{Audio-Language Models under Psychometric Degradations: Optimization for Voice Activity Detection}
+\author{Gabriel Bibbó, Mark D. Plumbley}
+\date{\today}
+\maketitle
+
+\section{Abstract}
+\label{sec:abstract}
+
+Large audio–language models (LALMs) such as Qwen2-Audio are widely used for high-level audio understanding, but their suitability for low-level detection under degraded conditions is unclear. We ask: (i) how well a LALM can act as a voice activity detector (VAD) under controlled acoustic degradations, and (ii) how much its behaviour can be improved by prompt optimization versus parameter-efficient fine-tuning. We propose a psychometric-style framework that starts from balanced speech/non-speech clips and generates 22 one-dimensional conditions across four axes: segment duration (20–1000 ms), signal-to-noise ratio, reverberation, and spectral filtering. Using Qwen2-Audio-7B, we query each degraded segment with binary and multiple-choice prompts, compute balanced accuracy per clip and per condition, and read accuracy–versus–duration curves as an empirical estimate of temporal resolution. We combine automatic prompt optimization (OPRO) with LoRA fine-tuning in a 2×2 design (base vs. LoRA; hand-crafted vs. optimized prompts). Results show that OPRO consistently improves over a zero-shot baseline and that OPRO+LoRA yields high, stable accuracy across conditions, with short durations being the most challenging regime. The shortest window at which accuracy stabilizes acts as a useful proxy for the model's temporal integration scale. Although instantiated for speech vs. non-speech, the framework is class-agnostic and directly applicable to other sound events, offering a general methodology to probe and shape LALM behaviour under controlled acoustic degradations.
+
+
+\noindent\textbf{Keywords:}
+Large audio–language models,
+voice activity detection,
+acoustic degradations,
+psychometric evaluation,
+prompt optimization,
+LoRA fine-tuning,
+temporal resolution,
+sound event detection.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Introduction}
+\label{sec:introduction}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+This paper evaluates Large Audio-Language Models (LALMs) on robust Voice Activity Detection (VAD) under controlled acoustic degradations, using speech versus non-speech classification as a test case~\cite{deshmukh2023pengi,ghosh2024gama,chu2024qwen2}.
+
+\subsection{Problem Statement and Motivation}
+\label{subsec:motivation}
+
+Classical VAD and Sound Event Detection (SED) systems are known to be fragile when acoustic conditions deviate from controlled training scenarios. This fragility motivates the search for architectures and training strategies that generalize across diverse acoustic environments.
+
+We use Qwen2-Audio~\cite{chu2024qwen2} as a representative LALM; while such models excel at high-level audio understanding, their behaviour as low-level detectors under degraded conditions is unknown. Moreover, LALMs exhibit known temporal limitations~\cite{wang2025timeaudio,sridhar-etal-2025-enhancing} that may constrain fine-grained detection.
+
+We therefore consider both automatic prompt optimization and parameter-efficient fine-tuning as complementary strategies to improve robustness, and adopt a psychometric-style evaluation over segment duration, signal-to-noise ratio, reverberation and spectral filtering, inspired by psychoacoustic work on speech intelligibility (see Section~\ref{subsec:psychoacoustic}). This framework provides an empirical view of how detection reliability changes with each acoustic parameter and with temporal resolution (see Section~\ref{subsec:aqa_temporal}).
+
+Building on these observations, we next summarize the main limitations of existing work and position the contributions of this paper.
+
+\subsection{Research Gap and Contributions}
+\label{subsec:gap}
+
+The literature establishes several findings: (i) VAD and SED systems remain fragile under realistic acoustic degradations including noise, reverberation, and capture variations~\cite{mihalache2022using,wang2025sincqdr,de2021analysis,papadimitriou2020audio,turpault2021sound,bibbo2025room}; (ii) psychoacoustic research provides motivation for multi-dimensional degradation protocols~\cite{macpherson2014variations,kocinski2016time,cueille2022effects,visentin2017effects}; (iii) LALMs represent a new paradigm with audio understanding capabilities but known temporal limitations~\cite{deshmukh2023pengi,ghosh2024gama,chu2024qwen2,wang2025timeaudio,sridhar-etal-2025-enhancing}; (iv) prompt formulation affects LALM performance and can be optimized~\cite{CHEN2025101260,ramnath2025systematic,sabbatella2024prompt}; (v) parameter-efficient fine-tuning offers a complementary path to improved robustness~\cite{hu2022lora}.
+
+Despite this body of work, we identify a gap: \textbf{no prior study has evaluated a LALM on robust VAD under a psychometrically-motivated protocol spanning multiple degradation dimensions.} Existing work has not:
+
+\begin{enumerate}
+    \item Characterized LALM detection performance across controlled combinations of SNR, duration, reverberation, and noise type, dimensions known from psychoacoustics to produce distinct perceptual effects~\cite{macpherson2014variations,kocinski2016time,cueille2022effects,visentin2017effects};
+    \item Investigated whether prompt optimization (OPRO) and parameter-efficient fine-tuning (LoRA) can enhance LALM robustness to acoustic degradations;
+    \item Examined the interaction between prompt design and degradation severity in determining detection reliability.
+\end{enumerate}
+
+This paper addresses this gap by evaluating Qwen2-Audio-7B~\cite{chu2024qwen2} on a bank of 22 degradation conditions, applying prompt optimization via OPRO~\cite{yang2023large}, and investigating LoRA-based adaptation for improved robustness~\cite{hu2022lora}. Although our experiments focus on speech as the target class, the proposed protocol and analysis are directly transferable to other sound events by relabelling the positive class, making the framework broadly applicable beyond VAD. Our contribution bridges the literature on classical robust detection with the emerging capabilities of audio-language models, establishing whether LALMs can serve as reliable event detectors under challenging conditions.
+
+\subsection{Paper Organization}
+\label{subsec:organization}
+
+The remainder of this paper is organized as follows. Section~\ref{sec:background} reviews prior work on robust VAD/SED, psychoacoustic evidence for acoustic degradations, audio-language models, and prompt optimization. Section~\ref{sec:method} describes our psychometric-style evaluation framework and optimization setup. Section~\ref{sec:results} presents experimental results, followed by discussion in Section~\ref{sec:discussion} and conclusions in Section~\ref{sec:conclusion}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Background and Related Work}
+\label{sec:background}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\subsection{From Speech Detection to Robust VAD and SED}
+\label{subsec:vad_sed_fragility}
+
+Voice Activity Detection (VAD) and Sound Event Detection (SED) are foundational tasks that serve as upstream components in pipelines including automatic speech recognition, speaker diarization, and forensic audio analysis \cite{mihalache2022using,de2021analysis,turpault2021sound}. Despite decades of research and the widespread adoption of Deep Neural Networks (DNNs), these detection systems remain fragile under realistic acoustic conditions \cite{mihalache2022using,wang2025sincqdr,de2021analysis,papadimitriou2020audio,turpault2021sound,bibbo2025room}.
+
+The dependency of downstream systems on VAD reliability is illustrated by Mihalache and Burileanu \cite{mihalache2022using}, who developed a deceptive speech detection system where VAD serves as the segmentation mechanism. Their hybrid Convolutional Neural Network (CNN) and Multilayer Perceptron (MLP) VAD achieved only 64\% utterance-level accuracy on real-world recordings with restaurant-like ambient noise, despite domain-specific adaptation. This VAD reliability directly constrained the entire pipeline's performance, with the final classifier achieving similar accuracy levels.
+
+These challenges have motivated continued research. Wang et al. \cite{wang2025sincqdr} note that VAD ``remains far from perfect in noisy and resource-constrained environments.'' Their SincQDR-VAD framework introduces learnable sinc bandpass filters and a ranking-aware loss function, achieving improvements on real-world datasets. Yet the authors acknowledge that false alarms caused by non-speech sounds remain an open problem, confirming that VAD design continues to be an active research topic.
+
+Sound Event Detection exhibits similar fragility. De Benito-Gorr\'{o}n et al. \cite{de2021analysis} evaluated Convolutional Recurrent Neural Networks (CRNNs) under multiple degradations including frequency filtering, dynamic range compression, and audio overlap. High-pass filtering with cutoff frequencies above 1~kHz proved most harmful, as it removes low-frequency information needed for many event categories. Event overlap caused performance drops exceeding 50\% relative to clean conditions for some categories.
+
+Papadimitriou et al. \cite{papadimitriou2020audio} quantified the impact of Signal-to-Noise Ratio (SNR) on detection, evaluating audio surveillance event detection across eight SNR levels from $-5$~dB to 30~dB. Their cross-SNR generalization experiments revealed failures: models trained at 30~dB and tested at $-5$~dB achieved only 18\% F1-Score. The authors note that ``the vast majority of studies on audio events have reported results on positive-only SNR sound events,'' highlighting an evaluation gap.
+
+The DESED synthetic soundscape benchmark \cite{turpault2021sound} enables controlled investigation of reverberation effects. Reverberation degraded system performance by approximately 15\% in F-score, with the authors concluding that this degradation ``may be problematic in real recordings where reverberation varies greatly.''
+
+Beyond laboratory degradations, real-world capture conditions introduce systematic variations. We previously \cite{bibbo2025room} demonstrated that room acoustics and microphone characteristics are dominant factors in sound event recognition, with impulsive event detection dropping substantially in reverberant spaces while sustained events such as speech proved more robust.
+
+In summary, even modern DNN-based systems show performance losses when acoustic conditions deviate from controlled training scenarios \cite{mihalache2022using,wang2025sincqdr,de2021analysis,papadimitriou2020audio,turpault2021sound,bibbo2025room}. This fragility motivates systematic evaluation across diverse degradation conditions.
+
+\subsection{Psychoacoustic Evidence for Our Degradation Dimensions}
+\label{subsec:psychoacoustic}
+
+The degradation dimensions in our evaluation protocol (SNR, duration, reverberation, and noise type) find justification in psychoacoustic research on human speech intelligibility \cite{macpherson2014variations,kocinski2016time,cueille2022effects,visentin2017effects}.
+
+MacPherson and Akeroyd \cite{macpherson2014variations} surveyed 885 psychometric functions from 139 studies, finding that slopes varied from 1\% to 44\% per dB, with a median of 6.6\% per dB. They concluded that ``the perceptual benefit offered by an improvement in signal-to-noise ratio depends greatly on the listening environment.'' Single speech maskers produced shallow slopes (median 3.7\%/dB) because amplitude fluctuations enable glimpsing through masker dips, while stationary noise yielded steeper slopes (median 7.7\%/dB) as it offers no such opportunities.
+
+The interaction between temporal factors and reverberation provides additional grounding for our protocol. Koci\'{n}ski and Niemiec \cite{kocinski2016time} demonstrated that temporal compression reduces available temporal cues while reverberation fills gaps and masks transients needed for recognition. Cueille et al. \cite{cueille2022effects} examined how reverberation affects speech intelligibility in noise, identifying two degradation mechanisms: temporal smearing of target speech reduces intelligibility directly, while temporal smearing of noise maskers eliminates the ``dip listening'' benefit, that is the ability to glimpse speech during masker amplitude minima. When reverberation was applied to noise, dip listening benefits were cancelled. The authors emphasize that ``reverberation can have a strong detrimental effect on speech intelligibility in noise,'' with combined effects producing challenging conditions.
+
+Visentin and Prodi \cite{visentin2017effects} revealed a dissociation between accuracy and cognitive effort. Despite similar intelligibility scores for stationary and fluctuating noise (when equated for speech transmission index), fluctuating noise conditions were rated as more effortful, with response times approximately 180~ms slower. This finding implies that two degradation conditions producing equivalent accuracy may impose different processing burdens, motivating our inclusion of different noise types rather than treating SNR as the sole degradation dimension.
+
+Taken together, these psychoacoustic findings show that human perception exhibits graded sensitivity to multiple acoustic factors, not just overall SNR \cite{macpherson2014variations,kocinski2016time,cueille2022effects,visentin2017effects}. These observations motivate our bank of degradation conditions, conceived as ``model psychometric functions'' that characterize detector sensitivity across controlled parameter ranges.
+
+\subsection{Modern Architectures: From CNNs to Transformers and LALMs}
+\label{subsec:modern_architectures}
+
+The transition from convolutional and recurrent architectures to transformer-based models represents a shift in audio detection methodology \cite{ZAMAN2025104956}. Self-attention mechanisms enable capturing long-range dependencies that challenge recurrent models, while parallel processing and transfer learning from pretrained models offer practical advantages. However, transformers may still struggle to generalize to unseen acoustic environments.
+
+Large Audio-Language Models represent the next paradigm shift, integrating audio encoders with pretrained Large Language Models (LLMs) to enable free-form text generation for diverse audio tasks \cite{ghosh2024gama,wang2025u,chu2024qwen2}. GAMA \cite{ghosh2024gama} exemplifies this approach, combining a frozen LLaMA-2 backbone with multiple audio representation pathways and demonstrating 8--58\% improvements over baselines on reasoning benchmarks.
+
+U-SAM \cite{wang2025u} employs specialized encoders for speech, general audio, and music, achieving strong performance across diverse tasks and exhibiting emergent capabilities on unseen tasks.
+
+Qwen2-Audio \cite{chu2024qwen2}, which serves as our target model, integrates the Whisper-large-v3 encoder with the Qwen-7B language model for audio understanding.
+
+The integration of language model capabilities into detection pipelines predates full LALMs. Wang et al. \cite{wang2024leveraging} proposed SED-LM, using language models as autoregressive text generators for simultaneous event classification and temporal localization. Their best configuration outperformed CRNN baselines, suggesting that language model integration can enhance detection accuracy.
+
+These advances suggest that LALMs like Qwen2-Audio could serve not only for high-level tasks (question answering, captioning) but also as event detectors \cite{ghosh2024gama,wang2025u,wang2024leveraging}. Understanding how such models behave under realistic acoustic degradations is therefore an important research direction.
+
+\subsection{Audio Question Answering and Temporal Limitations of LALMs}
+\label{subsec:aqa_temporal}
+
+Audio Question Answering (AQA) has emerged as a benchmark for acoustic reasoning \cite{yang2025multi,dcase2025task5aqa}. The DCASE 2025 Challenge Task 5 benchmark comprises bioacoustics QA (testing fine-grained acoustic perception), temporal soundscapes QA (evaluating temporal reasoning), and complex QA (requiring higher-order inference).
+
+Baseline evaluation revealed room for improvement \cite{yang2025multi}. Qwen2-Audio achieved 30--52\% accuracy across subsets, with no model demonstrating consistent performance. Qualitative analysis revealed tendencies toward hallucination, timestamp imprecision, and confusion between perceptually similar sounds \cite{yang2025multi}.
+
+While AQA and our VAD evaluation share the same underlying model, the tasks differ in their level of abstraction. AQA assesses reasoning through multiple-choice questions requiring inference and contextual understanding. Our work applies the LALM to binary classification of voice presence under degradation, i.e., a simpler decision problem at the semantic level. However, we also evaluate multiple-choice prompting variants for VAD, where the model must select the correct option among several textual candidates. This aligns our classification setting with the multiple-choice format used in AQA benchmarks, placing both tasks on a comparable footing in terms of prompt structure.
+
+Despite their capabilities, LALMs exhibit systematic temporal limitations \cite{wang2025timeaudio,sridhar-etal-2025-enhancing}. Wang et al. \cite{wang2025timeaudio} characterize ``temporal gaps'' as the inability to accurately comprehend timestamps for localization, arising from architectural choices including temporal downsampling in projection layers. Their TimeAudio framework introduces explicit temporal markers and time-aware encoding, achieving improvements on temporal grounding tasks.
+
+Sridhar et al. \cite{sridhar-etal-2025-enhancing} observed ``significant deficit in temporal reasoning'' in LALMs for AQA, with baselines achieving only 22\% accuracy on reasoning benchmarks. Targeted data augmentation and curriculum learning improved performance, but without careful training strategies models ``overfit to temporal reasoning'' while ``forgetting base capabilities.''
+
+In classical SED, Ren et al. \cite{ren2025group} identify a conflict: event classification requires global representations while temporal localization depends on high-resolution local features. Their Group Feature Calibration module addresses this through multi-dimensional feature enhancement.
+
+These findings indicate that LALMs are not naturally fine-grained temporal markers \cite{wang2025timeaudio,sridhar-etal-2025-enhancing}. This reinforces our decision to evaluate clip-level VAD as a detection task before addressing temporal grounding challenges.
+
+In addition, our evaluation protocol varies segment duration down to windows as short as 20~ms. By analysing detection performance as a function of window length, we treat the shortest duration at which the model can still make reliable speech/non-speech decisions as an empirical measure of its temporal resolution. For instance, if a model performs poorly at 20~ms and 50~ms but reaches acceptable accuracy at 100~ms, this crossover point can be interpreted as its effective temporal integration window. Conceptually, this corresponds to a pipeline where the full audio stream is segmented into short windows and the model is repeatedly queried about event presence in each window, allowing us to probe the temporal limits of audio-language understanding.
+
+\subsection{Prompt Sensitivity and Adaptation Mechanisms}
+\label{subsec:prompts}
+
+\subsubsection{Prompt Sensitivity and Automatic Prompt Optimization}
+\label{subsubsec:apo}
+
+LALM performance depends on prompt formulation, creating both vulnerability and opportunity \cite{CHEN2025101260,ramnath2025systematic,hou2025evaluating}. Hou et al. \cite{hou2025evaluating} evaluated LALM robustness against audio injection attacks, finding disparities across models and attack types with no model demonstrating consistent robustness. A negative correlation emerged between instruction-following capability and injection robustness, while safety-aligned models exhibited greater resistance. These findings demonstrate that the audio-text input channel is sensitive to perturbations.
+
+Chen et al. \cite{CHEN2025101260} review prompt engineering techniques, while Ramnath et al. \cite{ramnath2025systematic} present a unified framework for Automatic Prompt Optimization (APO). They formalize the problem as finding prompts that maximize expected performance over a validation set, with techniques spanning discrete editing, continuous embedding optimization, and metaprompt design where LLMs generate and refine prompts.
+
+Optimization by Prompting (OPRO) \cite{yang2023large} uses the LLM itself to generate prompt candidates based on problem descriptions and previous solutions with scores. However, Zhang et al. \cite{zhang2024revisiting} demonstrate that small-scale LLMs show limited effectiveness as optimizers, highlighting the need for capable base models.
+
+Automatic prompt optimization operates entirely in the input space, keeping model parameters fixed \cite{ramnath2025systematic}. In contrast, parameter-efficient fine-tuning methods modify the model itself and are complementary rather than alternative to prompt optimization \cite{ramnath2025systematic,hu2022lora}.
+
+\subsubsection{Parameter-Efficient Fine-Tuning with LoRA}
+\label{subsubsec:lora}
+
+For efficient model adaptation, Low-Rank Adaptation (LoRA) \cite{hu2022lora} has become standard practice, enabling parameter-efficient fine-tuning of large models by training low-rank decomposition matrices rather than full weight updates. Unlike prompt optimization, which modifies inputs while keeping model weights frozen, LoRA adapts the model's internal representations to better suit the target task.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Proposed Methodology}
+\label{sec:method}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\subsection{Overview of the Framework}
+\label{subsec:overview}
+
+We present a framework to evaluate and improve Large Audio-Language Model (LALM) performance on voice activity detection under controlled acoustic degradations. The pipeline proceeds as follows: (i) extract base clips of 1000~ms from source datasets, each labeled as SPEECH or NONSPEECH; (ii) apply a bank of 22 psychometric degradation conditions spanning segment duration, signal-to-noise ratio (SNR), reverberation, and spectral filtering; (iii) embed each degraded segment in a fixed 2000~ms container padded with low-amplitude noise; (iv) query Qwen2-Audio with a VAD prompt asking whether the clip contains human speech; and (v) normalize the model's textual response to a SPEECH/NONSPEECH label for metric computation.
+
+This evaluation adopts a psychometric-style approach, treating accuracy as a function of each degradation parameter. By sweeping duration from 20 to 1000~ms while fixing other factors at neutral values, we trace an accuracy-versus-duration curve analogous to classical temporal integration functions. Similarly, varying SNR from $-10$ to $+20$~dB yields robustness curves. The framework is organized as a $2 \times 2$ factorial design crossing model type (Base versus LoRA-adapted) with prompt type (hand-crafted versus OPRO-optimized), enabling systematic comparison of these adaptation strategies.
+
+\subsection{Psychometric Degradation Bank}
+\label{subsec:degradation_bank}
+
+The degradation bank transforms each base clip into 22 variants along four independent dimensions, as summarized in Table~\ref{tab:degradation_bank}. When varying one dimension, the others are fixed at neutral values: 1000~ms duration, no added noise, no reverberation (T60 $=$ 0), and no spectral filtering. All variants are embedded in a 2000~ms container with symmetric padding using Gaussian noise of amplitude $\sigma = 0.0001$. We use this low-amplitude padding to avoid numerical issues such as division-by-zero or ill-defined SNR values in subsequent processing stages, while keeping the informative segment centered.
+
+\begin{table}[t]
+\centering
+\caption{Summary of the psychometric degradation bank (22 variants per base clip).}
+\label{tab:degradation_bank}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+
+\begingroup
+\sloppy
+
+\begin{tabular}{p{0.18\linewidth} p{0.28\linewidth} p{0.46\linewidth}}
+\hline
+\textbf{Axis} & \textbf{Condition} & \textbf{Values} \\
+\hline
+Segment duration &
+Centered segment length &
+20, 40, 60, 80, 100, 200, 500, 1000\,ms (8) \\
+\hline
+SNR &
+Added white-noise SNR &
+$-10$, $-5$, 0, $+5$, $+10$, $+20$\,dB (6) \\
+\hline
+Reverberation (T60) &
+Target T60 (RIR convolution) &
+0.0, 0.3, 1.0, 2.5\,s (4); for non-zero targets, select RIRs within $\pm 0.2$\,s \\
+\hline
+Spectral filtering &
+Butterworth filter type &
+None; bandpass 300--3400\,Hz; lowpass 3400\,Hz; highpass 300\,Hz (4) \\
+\hline
+\end{tabular}
+
+\vspace{0.5ex}
+\parbox{\linewidth}{\footnotesize\textit{Note:} When varying one axis, all other axes are held at their neutral settings (1000\,ms duration, no added noise, T60 $=0$, and no spectral filtering). Each variant is embedded in a 2000\,ms container with symmetric padding using Gaussian noise ($\sigma=10^{-4}$) to center the informative segment and avoid downstream numerical issues.}
+
+\endgroup
+\end{table}
+
+\subsubsection{Segment Duration Conditions}
+\label{subsubsec:duration}
+
+We extract centered segments of 20, 40, 60, 80, 100, 200, 500, and 1000~ms from each base clip, yielding eight duration conditions. The grid from 20 to 1000~ms is chosen to span from sub-frame windows at or below the encoder's effective frame rate ($\approx$40~ms for Whisper-style architectures) up to segments that comfortably contain several phonemes or short words. This range allows us to probe the crossover from ``too brief to decide'' to ``sufficient context for stable speech/non-speech decisions.''
+
+If the source clip is shorter than the target duration, no time-stretching is applied: the full clip is kept and later padded to the 2000~ms container, rather than being artificially lengthened. Shorter durations probe the model's temporal integration limit, as the minimum segment length at which reliable detection remains possible.
+
+\subsubsection{SNR Manipulations}
+\label{subsubsec:snr}
+
+We add white Gaussian noise at six SNR levels: $-10$, $-5$, 0, $+5$, $+10$, and $+20$~dB. We select this range to cover challenging surveillance-like conditions where speech is heavily masked ($-10$ to 0~dB), up to relatively clean conditions ($+20$~dB), in line with prior work examining cross-SNR generalization in audio event detection~\cite{turpault2021sound}.
+
+Noise amplitude is calibrated to the signal's Root Mean Square (RMS):
+\begin{equation}
+\sigma_{\text{noise}} = \frac{\text{RMS}_{\text{signal}}}{10^{\text{SNR}/20}}.
+\end{equation}
+The resulting mixture is clipped to $[-1, 1]$ to prevent saturation. For near-silent segments where the RMS of the effective speech/non-speech region falls below $10^{-8}$, we cannot meaningfully enforce a target SNR. In these rare cases, we add a minimal amount of Gaussian noise (RMS $= 10^{-4}$), mark the SNR as undefined, and retain the sample as an extreme low-SNR condition.
+
+\subsubsection{Reverberation Simulation}
+\label{subsubsec:reverb}
+
+We simulate room acoustics using real Room Impulse Responses (RIRs) from the RIRS\_NOISES dataset~\cite{ko2017study}. Four reverberation conditions are defined by target T60: 0.0~s (dry, no convolution), 0.3~s (typical of small offices or meeting rooms), 1.0~s (larger conference rooms), and 2.5~s (highly reverberant spaces such as halls or atriums). For each non-zero T60, we select RIRs whose estimated reverberation time falls within $\pm 0.2$~s of the target.
+
+Convolution is performed via FFT, and the output is truncated to the original segment length. For very short windows (e.g., 20~ms), this means we capture only the early part of the decay rather than the full T60 tail, but the temporal smearing of onsets is still sufficient to perturb transient cues. The resulting signal is normalized to match the original RMS before padding.
+
+\subsubsection{Spectral Filtering}
+\label{subsubsec:filtering}
+
+We apply four spectral conditions using fourth-order Butterworth filters with zero-phase filtering: none (unfiltered), bandpass (300--3400~Hz), lowpass (cutoff 3400~Hz), and highpass (cutoff 300~Hz). The 300--3400~Hz bandpass emulates a telephone-style channel (ITU-T recommendations) that retains most of the speech energy, while the highpass (300~Hz) and lowpass (3400~Hz) conditions selectively remove low-frequency voicing and high-frequency consonant cues, respectively, to test how strongly the model relies on these spectral regions.
+
+\subsection{Prompting Strategies for VAD}
+\label{subsec:prompting}
+
+Voice Activity Detection through audio language models presents unique challenges in prompt design. Unlike traditional text-based LLM tasks, VAD requires transforming continuous audio representations into discrete binary decisions (SPEECH/NONSPEECH). To systematically explore the prompt design space and understand how different response formats affect optimization and performance, we implement two distinct prompting schemes: a constrained multiple-choice format and an open-ended descriptive format. This dual-scheme approach allows us to investigate whether constrained decoding (forcing single-token A/B/C/D outputs) offers advantages over free-form natural language responses, and how OPRO optimization trajectories differ when starting from diverse seed prompts versus format-consistent seeds.
+
+The rationale for testing both schemes is threefold:
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Alignment with benchmarks}: Multiple-choice A/B/C/D formatting aligns with Audio Question Answering benchmarks~\cite{yang2025multi}, enabling potential cross-task comparison.
+\item \textbf{Decoding efficiency}: Constrained single-token decoding may reduce inference latency and provide clearer probability distributions compared to parsing multi-token text.
+\item \textbf{Optimization robustness}: Testing whether OPRO can successfully optimize prompts across fundamentally different response formats reveals the generalizability of the optimization procedure.
+\end{enumerate}
+
+We run these schemes as separate experiments with different seed sets, decoding configurations, and response normalization strategies. All experiments ultimately map model outputs to the same binary SPEECH/NONSPEECH labels for fair comparison.
+
+\subsubsection{Constrained Multiple-Choice Scheme}
+\label{subsubsec:mc_scheme}
+
+The multiple-choice scheme uses A/B/C/D formatting with constrained first-token decoding. Prompts in this format present labeled options and instruct the model to respond with a single letter. An example seed prompt is:
+\begin{quote}
+\textit{``Listen. Does this contain: A) Human speech, or B) Other sounds? Output A or B.''}
+\end{quote}
+
+The implementation enforces vocabulary restriction to tokens corresponding to A, B, C, D during generation. The model tokenizer maps each letter to single-token IDs, which are precomputed and verified. The maximum number of new tokens is set to 1, forcing single-token responses. All A/B/C/D logits are captured from the first generation step, normalized via softmax, and stored separately, providing a full probability distribution even when unused options (C/D) are not relevant to the binary task. The prompt metadata specifies which letter maps to which label (e.g., A $\rightarrow$ SPEECH, B $\rightarrow$ NONSPEECH), and the predicted letter is converted to the final binary label via this mapping.
+
+Since the model is constrained to output only A/B/C/D tokens, normalization is deterministic: the generated letter is extracted, the prompt-specific mapping is applied, and confidence 1.0 is assigned since the model is forced to select one of the allowed options.
+
+This scheme offers lower latency (single token generation), clean probability distributions, and no ambiguity in parsing. However, it restricts expressiveness (cannot explain reasoning), requires exact token matching (tokenizer-dependent), and is incompatible with models that tokenize letters as multi-token sequences.
+
+\subsubsection{Open-Ended Descriptive Scheme}
+\label{subsubsec:open_scheme}
+
+The open-ended scheme allows free-form natural language responses without vocabulary restrictions. Prompts encourage descriptive or direct answers. Example seed prompts include:
+\begin{quote}
+\textit{``What do you hear in this audio?''} \quad (fully open)
+\end{quote}
+\begin{quote}
+\textit{``Does this audio contain human speech? Answer SPEECH or NONSPEECH.''} \quad (label-style)
+\end{quote}
+\begin{quote}
+\textit{``Describe what you hear in this audio clip.''} \quad (instruction-based)
+\end{quote}
+
+This scheme applies standard autoregressive sampling without token restrictions, with a maximum of 128 new tokens allowing the model to generate variable-length descriptive text. Greedy decoding ensures deterministic outputs for reproducibility.
+
+This scheme offers interpretable responses (can inspect model reasoning), flexible prompt design (no tokenizer constraints), and natural alignment with instruction-following LLMs. However, it incurs higher latency (multi-token generation), parsing complexity (requires normalization pipeline), and potential ambiguity (model may generate unexpected phrasings).
+
+\subsubsection{Response Normalization Pipeline}
+\label{subsubsec:normalization}
+
+Open-ended responses must be mapped to SPEECH/NONSPEECH labels via a 5-level priority hierarchy:
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Explicit label detection}: Check for exact matches to ``SPEECH'', ``NONSPEECH'' (case-insensitive, including hyphenated variants). If ``NONSPEECH'' appears, return NONSPEECH with confidence 1.0. If ``SPEECH'' appears (checked after negated forms to avoid substring conflicts), return SPEECH with confidence 1.0.
+
+\item \textbf{YES/NO detection}: Match whole-word YES or NO (using word boundaries to avoid substring matches in longer phrases). Map YES $\rightarrow$ SPEECH, NO $\rightarrow$ NONSPEECH with confidence 0.95.
+
+\item \textbf{Letter mapping (if prompt provides A/B/C/D mapping)}: Extract the first letter from responses like ``A'' or ``The answer is B''. Map using prompt-specific label mapping (e.g., A $\rightarrow$ SPEECH) with confidence 1.0.
+
+\item \textbf{Synonym-based semantic matching}: Count occurrences of speech-related synonyms (\textit{voice, voices, talking, spoken, speaking, conversation, dialogue, person talking, human voice, vocal, utterance}) versus non-speech synonyms (\textit{music, musical, noise, silence, beep, beeping, tone, tones, chime, ambient, environmental, background, instrumental, melody}). Return the dominant category with confidence 0.8 if counts differ by at least 2; otherwise, proceed to fallback.
+
+\item \textbf{LLM fallback}: If no rule fires, invoke a small LLM (GPT-4o-mini via API) with the prompt: \textit{``The audio model responded: `[response]'. Does this mean SPEECH or NONSPEECH? Reply with only one word.''} Parse the LLM's answer and assign confidence 0.6.
+
+\item \textbf{UNKNOWN}: If all methods fail, return UNKNOWN with confidence 0.0 (treated as NONSPEECH in final evaluation).
+\end{enumerate}
+
+Confidence scores reflect the reliability of each matching method. Higher confidence indicates less ambiguity in the mapping.
+
+\subsection{Optimization Strategies}
+\label{subsec:optimization}
+
+We consider two complementary strategies to improve LALM robustness for VAD: automatic prompt optimization, which modifies the input while keeping model parameters frozen, and parameter-efficient fine-tuning, which adapts the model's internal representations.
+
+\subsubsection{Automatic Prompt Optimization (OPRO)}
+\label{subsubsec:opro}
+
+Following the Optimization by Prompting paradigm~\cite{yang2023large}, we employ a meta-LLM to generate and refine prompts based on evaluation feedback. The optimization loop proceeds as follows:
+
+\begin{enumerate}[leftmargin=*]
+\item Initialize from a hand-crafted prompt and evaluate it on a fixed stratified development subset with equal representation of SPEECH and NONSPEECH.
+
+\item Construct a meta-prompt describing the task, the reward function, and the top-$k$ prompts with their scores. At each iteration, this meta-prompt is passed to the meta-LLM, which proposes new candidate prompts.
+
+\item The meta-LLM is instructed to generate new prompts that are concise and emphasize robustness to short and noisy clips. The meta-prompt encourages diverse prompt formats (direct questions, binary choice, commands, open-ended queries), with model responses automatically normalized to SPEECH/NONSPEECH labels via the parsing pipeline described in Section~\ref{subsubsec:normalization}.
+
+\item Candidate prompts are sanitized by removing forbidden special tokens and enforcing a character length range, without imposing keyword restrictions. This allows OPRO to explore diverse phrasings and prompt formats.
+
+\item Evaluate each candidate on the development subset and compute the reward:
+\begin{equation}
+R = \mathrm{BA}_{\text{clip}} + 0.25 \times \mathrm{BA}_{\text{conditions}},
+\end{equation}
+where $\mathrm{BA}_{\text{clip}}$ is the balanced accuracy computed globally over the development samples, and $\mathrm{BA}_{\text{conditions}}$ is the mean of balanced accuracies computed separately for each degradation dimension (duration, SNR, filtering, reverberation). This formulation encourages prompts that perform well across the full degradation bank rather than excelling only under clean conditions.
+
+\item Update the top-$k$ memory, keeping the highest-scoring prompts.
+
+\item Repeat for a fixed number of iterations or until no improvement for several consecutive iterations (early stopping).
+\end{enumerate}
+
+We conduct OPRO optimization experiments with different seed configurations to evaluate prompt optimization under various initialization strategies: format-consistent seeds (all instructing binary label output), and diverse seeds mixing multiple formats (descriptive, binary, multiple-choice, with definitions, few-shot examples).
+
+\subsubsection{Parameter-Efficient Fine-Tuning (LoRA)}
+\label{subsubsec:lora}
+
+We apply Low-Rank Adaptation~\cite{hu2022lora} to the attention projection matrices ($\mathbf{W}_Q$, $\mathbf{W}_K$, $\mathbf{W}_V$, $\mathbf{W}_O$) of both the audio encoder and language model components. Unlike prompt optimization, which modifies inputs while keeping model weights frozen, LoRA adapts the model's internal representations by training low-rank decomposition matrices rather than full weight updates.
+
+Training on all degradation conditions encourages the adapters to internalize robustness rather than overfitting to a single ``clean'' operating point. For the LoRA fine-tuning stage, we adopt an A/B multiple-choice format for training consistency:
+\begin{quote}
+\textit{``Does this audio segment contain speech?\ A) SPEECH\ B) NONSPEECH\ Answer:''}
+\end{quote}
+
+During training, the model is supervised to generate ``A'' or ``B'' via teacher-forcing (standard supervised fine-tuning loss on next-token prediction). At test time, evaluation uses the OPRO-optimized prompt (which may differ from the fine-tuning prompt) with open-ended generation. Responses are mapped to SPEECH/NONSPEECH via the normalization pipeline. This decoupling allows us to train with a consistent, unambiguous format (reducing label noise during fine-tuning) while evaluating with optimized prompts (potentially in different formats) to measure post-fine-tuning optimization gains.
+
+\subsection{Experimental Design}
+\label{subsec:experimental_design}
+
+The four experimental conditions result from crossing model type with prompt type in a $2 \times 2$ factorial design:
+
+\begin{itemize}[leftmargin=*]
+\item \textbf{Base + Hand}: Qwen2-Audio-7B-Instruct with a hand-crafted baseline prompt.
+\item \textbf{Base + OPRO}: Qwen2-Audio-7B-Instruct with the OPRO-optimized prompt for the base model.
+\item \textbf{LoRA + Hand}: LoRA-adapted model with the same hand-crafted prompt.
+\item \textbf{LoRA + OPRO}: LoRA-adapted model with the OPRO-optimized prompt for the LoRA model.
+\end{itemize}
+
+All four conditions are evaluated on an identical test set using the same evaluation script and inference parameters. The OPRO prompts differ between Base and LoRA because optimization is performed separately for each model, yielding prompts tailored to each model's behavior.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Experimental Setup}
+\label{sec:experimental}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\subsection{Datasets}
+\label{subsec:datasets}
+
+\subsubsection{Data Sources}
+\label{subsubsec:data_sources}
+
+For all stages of the study (LoRA fine-tuning, OPRO development, and final evaluation), speech segments are drawn from the VoxConverse corpus~\cite{chung2020spot}. However, our dataset is constructed by extracting fixed-length 1000~ms clips at random offsets within the available speech material; at this granularity, conversational speech is not uniformly dense and may include natural pauses, breaths, and onset/offset regions. To enforce label purity at the clip level (i.e., that SPEECH clips are dominated by active speech), we apply a post-selection speech activity detection (SAD/VAD) check, which is a standard front-end step used to separate speech from non-speech events in speech processing and diarization pipelines~\cite{park2022diarization}. We implement this check with the off-the-shelf Silero VAD, a widely used practical VAD for speech/non-speech filtering and data preparation~\cite{silero_vad_github}, and one that is also adopted as an off-the-shelf baseline in recent VAD evaluations~\cite{karan24_interspeech}. For each candidate clip, we compute a speech activity ratio (fraction of frames classified as speech) and retain the clip only if this ratio is at least 0.8, allowing short natural pauses while discarding segments with low speech occupancy.
+
+Non-speech segments are sampled from a filtered subset of ESC-50~\cite{piczak2015esc}. We exclude 17 categories containing human or animal vocalizations: human sounds (breathing, clapping, coughing, crying\_baby, drinking\_sipping, footsteps, sneezing, snoring) and animal sounds (cat, chirping\_birds, crickets, frog, hen, insects, pig, rooster, sheep). The remaining categories provide unambiguous environmental sounds for the NONSPEECH class.
+
+All audio is resampled to 16~kHz mono and segmented into 1000~ms clips. The base clip pool is thus formed by SPEECH clips from VoxConverse that pass the post-selection SAD/VAD quality-control step described above (speech activity ratio $\geq 0.8$) and NONSPEECH clips from filtered ESC-50. From this pool, we construct all experimental splits with balanced class distributions. At prediction time, Qwen2-Audio produces a textual response; we normalize it to the binary label set \{SPEECH, NONSPEECH\} using the rule-based mapper described in Section~\ref{subsubsec:normalization}.
+
+\subsubsection{Dataset Splits}
+\label{subsubsec:splits}
+
+Three non-overlapping splits are constructed from the base clip pool:
+
+\textbf{LoRA training data}: The LoRA model is trained on 200 base clips (balanced between SPEECH from VoxConverse and NONSPEECH from ESC-50) $\times$ 22 conditions $\approx$ 4,400 samples, with additional development (100 clips $\times$ 22 $\approx$ 2,200 samples) and internal test (50 clips $\times$ 22 $\approx$ 1,100 samples) splits built from the same pool. Splits are defined at the base-clip level using GroupShuffleSplit stratified by speaker (VoxConverse) or recording (ESC-50) to prevent leakage.
+
+\textbf{OPRO development set}: The OPRO development set consists of 30 base clips $\times$ 22 conditions = 660 degraded samples, again balanced between SPEECH (VoxConverse) and NONSPEECH (ESC-50). This set is used exclusively for prompt optimization and is disjoint from the LoRA training data. Each prompt evaluation uses the complete development set stratified by class with a fixed random seed, ensuring all prompts are evaluated on the same data for fair comparison.
+
+\textbf{Final evaluation set}: The final evaluation set uses 970 base clips $\times$ 22 conditions = 21,340 samples, with equal numbers of SPEECH and NONSPEECH base clips (485 each). This test set has no overlap with the data used for LoRA training or OPRO optimization.
+
+\subsection{Implementation Details}
+\label{subsec:implementation}
+
+\subsubsection{Software and Libraries}
+\label{subsubsec:software}
+
+The framework is implemented in Python using PyTorch for model inference and training. We use the Transformers library~\cite{wolf2020transformers} for Qwen2-Audio model loading and generation, PEFT for LoRA configuration and injection, and bitsandbytes for 4-bit NF4 quantization (installed as an optional dependency). Audio processing relies on soundfile and librosa for file I/O, SciPy for filtering and convolution, and NumPy for array operations. Dataset splits are created using scikit-learn's GroupShuffleSplit to prevent leakage across speakers (VoxConverse) or recordings (ESC-50). Evaluation metrics and statistical analyses use SciPy's statistical functions and custom implementations for bootstrap confidence intervals.
+
+\subsubsection{Hardware and Runtime}
+\label{subsubsec:hardware}
+
+Experiments are run on a Slurm-managed GPU cluster using NVIDIA RTX 3090 GPUs with 24~GB of memory (and occasionally compatible GPUs such as RTX A5000, selected via node constraints). The 4-bit NF4 quantization is required to fit Qwen2-Audio-7B-Instruct and the LoRA adapters within 24~GB. LoRA fine-tuning uses gradient checkpointing to further reduce memory footprint. A full evaluation of all 21,340 test samples takes approximately 2 hours on a single RTX 3090.
+
+\subsubsection{Model Configuration}
+\label{subsubsec:model_config}
+
+The zero-shot baseline uses Qwen2-Audio-7B-Instruct~\cite{chu2024qwen2} without any task-specific adaptation. The model is loaded using 4-bit quantization (bitsandbytes) with float16 compute to fit the 7B audio-language model within 24~GB of GPU memory.
+
+For LoRA fine-tuning, we use QLoRA with NF4 quantization and float16 compute precision, injecting rank-64 adapters with $\alpha = 16$ and dropout 0.05 into the attention projection matrices. The model is trained for 3 epochs on the training split with learning rate $5 \times 10^{-5}$, effective batch size 8 (2 per device with 4 gradient accumulation steps), and 100 warmup steps. Gradient checkpointing is enabled to reduce memory footprint.
+
+\subsubsection{OPRO Configuration}
+\label{subsubsec:opro_config}
+
+We employ Qwen2.5-7B-Instruct as the meta-LLM for prompt optimization. The meta-LLM is instructed to generate exactly three new prompts per iteration that are concise (10--300 characters). Generation uses temperature 0.7 and nucleus sampling with $p=0.9$. The optimization maintains the top-$k$ prompts with $k=10$ and runs for up to 30 iterations or until no improvement for 5 consecutive iterations (early stopping). Each prompt evaluation uses a fixed stratified subset of 500 development examples with a fixed random seed for reproducibility.
+
+\subsubsection{Inference Parameters}
+\label{subsubsec:inference}
+
+For all conditions, audio is preprocessed to 16~kHz mono and embedded in a 2000~ms container with Gaussian padding ($\sigma = 0.0001$). Text generation uses greedy decoding (no sampling), a maximum of 128 new tokens, and the EOS token as pad token. The decoding mode is set to ``auto'', automatically detecting the prompt format and applying the corresponding normalization rules. Inference is performed in batches of 50 samples.
+
+\subsection{Evaluation Metrics}
+\label{subsec:metrics}
+
+\subsubsection{Balanced Accuracy}
+\label{subsubsec:balanced_acc}
+
+The primary metric is balanced accuracy (BA), computed as the arithmetic mean of per-class recall:
+\begin{equation}
+\text{BA} = \frac{1}{2} \left( \frac{\text{TP}}{\text{TP} + \text{FN}} + \frac{\text{TN}}{\text{TN} + \text{FP}} \right),
+\end{equation}
+where TP, TN, FP, FN denote true positives, true negatives, false positives, and false negatives with SPEECH as the positive class. We report BA at multiple levels: $\text{BA}_{\text{clip}}$ computed over all samples globally; $\text{BA}_{\text{cond}}$ computed per degradation condition; and dimension-level BA computed as the macro-average of condition-level BAs within each degradation axis (duration, SNR, filtering, reverberation).
+
+\subsubsection{Psychometric Thresholds}
+\label{subsubsec:thresholds}
+
+From the accuracy-versus-duration and accuracy-versus-SNR curves, we extract:
+\begin{itemize}[leftmargin=*]
+\item DT50, DT75, DT90: minimum durations to reach 50\%, 75\%, 90\% accuracy.
+\item SNR-75: minimum SNR to reach 75\% accuracy at 1000~ms duration.
+\end{itemize}
+Thresholds are estimated by linear interpolation on the empirical curve. When accuracy does not cross the target level, the threshold is reported as undefined.
+
+\subsubsection{Additional Metrics}
+\label{subsubsec:additional}
+
+For experiments using logit-based scoring, we compute ROC-AUC and PR-AUC from the difference in log-probabilities between SPEECH and NONSPEECH tokens. Optimal decision thresholds are identified by maximizing F1-score over a sweep of probability thresholds from 0 to 1. When converting logit differences to probabilities, we optionally apply temperature scaling for calibration. Beyond the canonical SNR-75 summary at 1000~ms, we additionally compute stratified SNR curves at multiple fixed durations (20, 80, 200, and 1000~ms) and export a comprehensive table of precision/recall/F1 across the full threshold sweep.
+
+\subsection{Statistical Analysis}
+\label{subsec:statistics}
+
+We quantify uncertainty for configuration-level metrics and psychometric thresholds, and test paired differences between pre-specified system configurations. Because each base recording is expanded into multiple degraded variants, samples originating from the same base clip are not independent. Accordingly, all bootstrap procedures operate at the base-clip level (cluster bootstrap), resampling base clips with replacement and including all their associated variants in each resample.
+
+\subsubsection{Confidence Intervals}
+\label{subsubsec:ci}
+
+Per-class recalls (SPEECH and NONSPEECH) are reported with 95\% Wilson score confidence intervals, which provide stable coverage for binomial proportions. For the primary metric $\mathrm{BA}_{\text{clip}}$, we compute a 95\% confidence interval using a cluster bootstrap with $B=10{,}000$ resamples. Each bootstrap replicate is constructed by sampling the set of base clips (identified by \texttt{clip\_id}) with replacement, concatenating all variants belonging to the sampled clips, and recomputing $\mathrm{BA}_{\text{clip}}$. We report percentile intervals given by the 2.5th and 97.5th percentiles of the bootstrap distribution. All resampling procedures use a fixed random seed for reproducibility.
+
+\subsubsection{Model Comparison}
+\label{subsubsec:mcnemar}
+
+We restrict hypothesis testing to three primary, pre-specified comparisons: (i) Baseline vs.\ Base+OPRO, (ii) Baseline vs.\ LoRA, and (iii) LoRA vs.\ LoRA+OPRO. For each comparison, we report both an effect size and a paired significance test.
+
+\textbf{Effect size (paired $\Delta$BA).} We report $\Delta \mathrm{BA} = \mathrm{BA}_A - \mathrm{BA}_B$ and a 95\% confidence interval obtained via paired cluster bootstrap with $B=10{,}000$ resamples. In each replicate, we resample the same set of base clips for both configurations, preserving pairing at the clip level before recomputing $\Delta \mathrm{BA}$. Percentile bounds (2.5th and 97.5th) define the confidence interval.
+
+\textbf{Paired test (McNemar exact).} Statistical significance is assessed using McNemar's test on paired per-sample correctness. For a pair of configurations $A$ and $B$, let $n_{01}$ denote the number of samples that are correct under $A$ and incorrect under $B$, and $n_{10}$ the reverse. The exact two-tailed McNemar p-value is computed from the binomial distribution over discordant pairs with $n=n_{01}+n_{10}$ and $p=0.5$. Alongside the p-value, we report the discordance table $(n_{01}, n_{10})$ and the discordant rate $(n_{01}+n_{10})/N$, where $N$ is the total number of evaluated samples.
+
+\subsubsection{Multiple Comparisons}
+\label{subsubsec:multiple}
+
+To control the family-wise error rate over the three primary hypothesis tests, we apply the Holm--Bonferroni procedure to the set of three raw McNemar p-values. Adjusted p-values are reported and significance is assessed at $\alpha = 0.05$ after correction.
+
+\subsubsection{Psychometric Thresholds}
+\label{subsubsec:thresholds_ci}
+
+Psychometric thresholds are derived from accuracy-versus-condition curves computed on the evaluation set. For duration, we estimate DT50/DT75/DT90 (the minimum duration required to reach 50\%, 75\%, and 90\% accuracy). For SNR, we estimate SNR-75 (the minimum SNR required to reach 75\% accuracy). For each degradation axis, we compute empirical accuracy at each discrete condition level as the mean of the per-sample correctness within that condition. Thresholds are then obtained by linear interpolation of the empirical curve; if the target accuracy is not reached within the observed range, the corresponding threshold is reported as undefined.
+
+Uncertainty for thresholds is quantified using a cluster bootstrap with $B=10{,}000$ resamples at the base-clip level, recomputing the full condition-accuracy curve and the interpolated threshold in each replicate. We report percentile 95\% confidence intervals (2.5th and 97.5th percentiles) around the bootstrap distribution of each threshold.
+
+\section{Results}
+\label{sec:results}
+
+\subsection{Evaluation Set and Summary Metrics}
+\label{subsec:results_evalset}
+
+Our evaluation protocol is based on a fixed test set of $970$ unique 4-second clips (``base clips''). Each base clip is deterministically expanded into $22$ evaluation variants spanning four psychometric degradation axes, yielding $21{,}340$ scored samples in total ($970 \times 22$). The $22$ variants comprise: (i) \textit{Duration} truncations at eight values (20--1000\,ms), (ii) \textit{SNR} at six levels ($-10$\,dB to $+20$\,dB), (iii) four \textit{Filter} settings (none, bandpass, highpass, lowpass), and (iv) four \textit{Reverberation} settings (one neutral ``none'' plus three discrete reverberation profiles). We refer to the $20$ non-neutral settings as ``degradation conditions''; two additional neutral references (filter\_none and reverb\_none) are retained for completeness and to anchor the per-axis curves.
+
+The test set is perfectly class-balanced by construction. Across the full evaluation set, there are $10{,}670$ SPEECH and $10{,}670$ NONSPEECH samples (50.0\% / 50.0\%). This balance is preserved within each of the $22$ conditions: every condition contains $970$ samples with an exact split of $485$ SPEECH and $485$ NONSPEECH. This design ensures that changes in performance across conditions or configurations cannot be attributed to shifts in class prevalence, and it makes balanced accuracy a natural primary metric.
+
+Throughout the Results section, we summarize detection performance using balanced accuracy (BA), defined as the macro-average of per-class recall (i.e., the mean of sensitivity and specificity in the binary setting).
+Because the $22$ variants derived from the same base clip are not statistically independent, uncertainty estimates and paired comparisons treat the base clip as the resampling unit (cluster). Concretely, confidence intervals for global and derived statistics are obtained via clip-level (cluster) bootstrap resampling, which preserves within-clip dependence across variants. Finally, all model configurations are evaluated on the identical set of base clips and their corresponding variants, enabling strictly paired comparisons in subsequent analyses.
+
+
+\subsection{Overall Performance Across Configurations (Big Picture)}
+\label{subsec:overall_performance}
+
+We first summarize aggregate clip-level performance across the five primary configurations, using balanced accuracy (BA) as the main metric and reporting per-class recalls for SPEECH and NONSPEECH. All results in this subsection are computed on the same held-out test set (21,340 clips derived from 970 unique base clips), with uncertainty quantified via 95\% confidence intervals (CIs) as described in Section~\ref{subsec:statistics}.
+
+% --- Table: overall metrics (already contains table* env, caption, and label) ---
+\input{tables/Tab_R02_OverallPerformance.tex}
+
+% --- Figure: overall BA clip with error bars ---
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/Fig_R01_Overall_BAclip.png}
+\caption{Overall clip-level balanced accuracy (BA$_{\text{clip}}$) across configurations. Error bars denote 95\% CIs estimated via clip-level (cluster) bootstrap. The dashed line marks chance level (0.5).}
+\label{fig:overall_ba}
+\end{figure*}
+
+Fig.~\ref{fig:overall_ba} provides a compact visual comparison of BA across configurations, while Table~\ref{tab:overall_performance} reports BA and per-class recalls with their corresponding 95\% CIs.
+
+The hand-crafted baseline prompt yields a clip-level BA of 0.641. This score is dominated by a strong asymmetry between classes: NONSPEECH recall is high (0.959), whereas SPEECH recall is low (0.322). This pattern indicates a conservative decision behaviour that tends to reject speech under psychometric degradations, achieving very few false positives at the cost of many missed speech segments.
+
+Prompt optimization alone (Base+OPRO) produces a large uplift in overall performance, reaching BA = 0.881. The gain is primarily attributable to a dramatic increase in SPEECH recall (0.916), while NONSPEECH recall decreases to 0.846. In other words, the optimized prompt substantially improves sensitivity to speech under degradations, with an accompanying increase in false alarms on NONSPEECH.
+
+Parameter-efficient fine-tuning (LoRA) improves further to BA = 0.930. At this point, SPEECH recall saturates near ceiling (0.984), while NONSPEECH recall remains lower (0.877) than in the baseline. This suggests that fine-tuning largely resolves the baseline's speech-miss problem, but does not by itself fully restore robustness against false positives in challenging NONSPEECH conditions.
+
+Combining fine-tuning with prompt optimization yields the best overall performance. LoRA+OPRO achieves BA = 0.949, with SPEECH recall essentially unchanged relative to LoRA-only (0.982 vs.\ 0.984) but a notable improvement in NONSPEECH recall (0.916 vs.\ 0.877). The net effect is an absolute BA gain of approximately 0.019 over LoRA-only, indicating that OPRO primarily contributes by improving specificity (reducing false positives on NONSPEECH) once sensitivity is already near ceiling.
+
+Taken together, these aggregate results establish the main ordering used throughout the remainder of the section: (i) prompt optimization alone provides a large improvement over the baseline, (ii) LoRA fine-tuning provides a larger improvement still, and (iii) prompt optimization remains beneficial on top of LoRA, with gains concentrated in improved NONSPEECH handling. Subsequent subsections decompose these aggregate numbers by degradation axis and condition severity to characterize robustness and failure modes in more detail.
+
+\subsection{Primary Paired Comparisons and Statistical Significance}
+\label{subsec:results_primary_comparisons}
+
+Because all configurations are evaluated on the same degraded clips, we report \emph{paired} effect sizes for a small set of \emph{primary, pre-specified} comparisons. For each comparison (A vs.\ B), we compute $\Delta$BA $=$ BA(A)$-$BA(B), so negative values indicate that system B achieves higher balanced accuracy. We report $\Delta$BA with 95\% confidence intervals (CI) and assess statistical significance using McNemar's exact test on paired outcomes, applying Holm correction across the primary comparisons.
+
+\begin{figure}[t]
+    \centering
+    % Ensure the file exists at this path (or adjust accordingly).
+    \includegraphics[width=\linewidth]{figures/Fig_R02_DeltaBA_PrimaryComparisons.png}
+    \caption{Primary paired comparisons reported as $\Delta$BA $=$ BA(A)$-$BA(B). Error bars denote 95\% confidence intervals. Bars are colored by significance after Holm correction ($\alpha = 0.05$). Negative values indicate that the second configuration (B) outperforms the first (A).}
+    \label{fig:delta_ba_primary_comparisons}
+\end{figure}
+
+\begin{table}[t]
+\centering
+\caption{Primary paired comparisons on the evaluation set. $\Delta$BA $=$ BA(A)$-$BA(B).
+Discordant counts are from McNemar contingency tables: $n_{01}$ counts clips where A is
+incorrect and B is correct; $n_{10}$ counts clips where A is correct and B is incorrect.}
+\label{tab:primary_comparisons}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.12}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lccccccc}
+\toprule
+Comparison (A vs.\ B) & $\Delta$BA & 95\% CI & $p$ (raw) & $p_{\mathrm{Holm}}$ & Disc.\ rate & $n_{01}$ & $n_{10}$ \\
+\midrule
+Baseline vs Base+OPRO & -0.2406 & [-0.2574, -0.2233] & 0.00e+00 & 0.00e+00 & 0.378 & 1471 & 6605 \\
+Baseline vs LoRA     & -0.2896 & [-0.3027, -0.2760] & 0.00e+00 & 0.00e+00 & 0.381 & 976  & 7155 \\
+LoRA vs LoRA+OPRO    & -0.0188 & [-0.0229, -0.0150] & 6.78e-78 & 1.36e-77 & 0.024 & 60   & 462  \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+The first two comparisons show that both prompt optimization and parameter-efficient fine-tuning yield large absolute gains over the zero-shot baseline. Relative to the baseline, Base+OPRO improves BA by 24.06 percentage points (pp), while LoRA improves BA by 28.96\,pp (Table~\ref{tab:primary_comparisons}). In both cases, McNemar tables exhibit $n_{10} \gg n_{01}$, indicating that the improved systems correct substantially more baseline errors than they introduce.
+
+Conditioned on a LoRA-adapted model, OPRO provides an additional but smaller gain: LoRA+OPRO improves BA by 1.88\,pp over LoRA with the hand-crafted prompt (Table~\ref{tab:primary_comparisons}; Fig.~\ref{fig:delta_ba_primary_comparisons}). This improvement is driven primarily by higher NONSPEECH recall (specificity, i.e., fewer false alarms), while SPEECH recall (sensitivity) remains essentially unchanged. All three comparisons are statistically significant after Holm--Bonferroni correction.
+
+
+\subsection{Robustness Under Degradations: Condition-Level Results}
+\label{subsec:results_robustness_conditions}
+
+We next analyse robustness at the \emph{condition} level by sweeping one degradation axis at a time and reporting balanced accuracy (BA) per condition. For each condition, BA is computed as the mean of speech and non-speech recall, and curves are obtained by averaging across all evaluation clips sharing the same condition value. Figures~\ref{fig:r03_duration_ba}--\ref{fig:r06_filter_ba} compare the four primary configurations (Baseline, Base+OPRO, LoRA, LoRA+OPRO) under duration, SNR, reverberation, and filtering degradations.
+
+\paragraph{Duration.}
+Figure~\ref{fig:r03_duration_ba} shows that short analysis windows are the most challenging regime. The baseline remains substantially below the adapted configurations at the shortest durations, indicating limited reliability when only brief acoustic evidence is available. Both prompt optimization (Base+OPRO) and LoRA fine-tuning shift the curve upward across the entire sweep, while LoRA+OPRO achieves the highest BA and saturates quickly as duration increases.
+
+\paragraph{SNR.}
+In Figure~\ref{fig:r04_snr_ba}, the LoRA-based configurations are nearly flat across the full SNR range ($-10$ to $+20$~dB), maintaining very high BA even under heavy noise. Base+OPRO yields a large improvement over the baseline, but remains consistently below LoRA-based performance, suggesting that weight adaptation contributes most of the invariance to additive noise. Across SNR conditions, the gap between LoRA+OPRO and LoRA is small but consistent, indicating an incremental benefit from prompt optimization on top of model adaptation.
+
+\paragraph{Reverberation.}
+Figure~\ref{fig:r05_reverb_ba} indicates strong robustness of the adapted models to increasing reverberation time (RT60 up to 2.5~s). The baseline stays markedly lower, whereas both LoRA and LoRA+OPRO remain high and show minimal sensitivity to RT60. This behaviour is consistent with the hypothesis that LoRA fine-tuning improves robustness to temporal smearing and spectral coloration introduced by room acoustics.
+
+\paragraph{Spectral filtering.}
+Figure~\ref{fig:r06_filter_ba} compares filter types (none, bandpass, lowpass, highpass). While the baseline shows noticeable variation across filter types, the adapted configurations remain high and relatively stable. Among the adapted models, LoRA+OPRO again provides the strongest overall robustness and the smallest variability across filter conditions.
+
+\paragraph{Dimension-level summary.}
+To complement the per-condition curves, Table~\ref{tab:r04_dimension_means} reports mean BA within each degradation axis (macro-average over the conditions in that axis). Across all four axes, LoRA accounts for the largest absolute gains over baseline, while OPRO provides an additional (smaller) improvement on top of LoRA.
+
+\begin{table}[t]
+\centering
+\caption{Mean balanced accuracy (\%) within each degradation axis (macro-average over the conditions in that axis).}
+\label{tab:r04_dimension_means}
+\footnotesize
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Axis} &
+\textbf{Baseline} &
+\textbf{Base+OPRO} &
+\textbf{LoRA} &
+\textbf{LoRA+OPRO} \\
+\midrule
+Duration & 65.93 & 82.84 & 89.14 & \textbf{91.13} \\
+SNR      & 62.84 & 88.92 & 97.11 & \textbf{97.99} \\
+Reverb   & 64.33 & 92.78 & 93.71 & \textbf{96.29} \\
+Filter   & 61.91 & 92.84 & 93.94 & \textbf{96.42} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{figures/Fig_R03_Duration_BAbyCondition.png}
+\caption{Balanced accuracy versus duration (8 conditions; 20--1000~ms).}
+\label{fig:r03_duration_ba}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{figures/Fig_R04_SNR_BAbyCondition.png}
+\caption{Balanced accuracy versus SNR (6 conditions; $-10$ to $+20$~dB).}
+\label{fig:r04_snr_ba}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{figures/Fig_R05_Reverb_BAbyCondition.png}
+\caption{Balanced accuracy versus reverberation time RT60 (4 conditions; 0--2.5~s).}
+\label{fig:r05_reverb_ba}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{figures/Fig_R06_Filter_BAbyCondition.png}
+\caption{Balanced accuracy versus spectral filtering (4 conditions).}
+\label{fig:r06_filter_ba}
+\end{figure}
+
+
+\subsection{Psychometric Thresholds (DT50/DT75/DT90 and SNR-75)}
+\label{subsec:results_thresholds}
+
+To summarize robustness beyond aggregate scores, we derive compact psychometric thresholds along the two most diagnostic axes in our degradation bank: (i) \textit{duration thresholds} $\text{DT}p$ and (ii) the \textit{noise threshold} $\text{SNR75}$. Following standard psychophysical practice, each threshold is defined as the stimulus level (duration in ms, or SNR in dB) at which performance reaches a fixed criterion $p$ (50\%, 75\%, or 90\% for duration; 75\% for SNR).%
+\footnote{In many psychophysical settings, a 75\% criterion is used as a conventional operating point for forced-choice style performance summaries.}
+Threshold uncertainty is quantified via clip-level (cluster) bootstrap confidence intervals, resampling base clips to respect within-clip dependence across degradation variants.
+
+\begin{table}[ht]
+\centering
+\caption{Psychometric thresholds with 95\% bootstrap confidence intervals. Values are reported as point estimate [CI]. Flags indicate when the true threshold lies outside the tested range (censored).}
+\label{tab:psychometric_thresholds}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Configuration} & \textbf{DT50 (ms)} & \textbf{DT75 (ms)} & \textbf{DT90 (ms)} & \textbf{SNR75 (dB)} \\
+\midrule
+Baseline
+& 20.0 [20.0, 20.0] (below\_range)
+& 1000.0 [1000.0, 1000.0] (above\_range)
+& 1000.0 [1000.0, 1000.0] (above\_range)
+& 20.0 [20.0, 20.0] (above\_range) \\
+Base+OPRO-C
+& 20.0 [20.0, 20.0] (below\_range)
+& 36.8 [30.0, 50.2] (ok)
+& 392.9 [268.6, 633.3] (ok)
+& -10.0 [-10.0, -10.0] (below\_range) \\
+LoRA+Hand
+& 20.0 [20.0, 20.0] (below\_range)
+& 20.0 [20.0, 20.0] (below\_range)
+& 94.1 [73.3, 168.4] (ok)
+& -10.0 [-10.0, -10.0] (below\_range) \\
+LoRA+OPRO-C
+& 20.0 [20.0, 20.0] (below\_range)
+& 20.0 [20.0, 20.0] (below\_range)
+& 66.2 [52.4, 91.4] (ok)
+& -10.0 [-10.0, -10.0] (below\_range) \\
+LoRA+OPRO-O
+& 20.0 [20.0, 20.0] (below\_range)
+& 20.0 [20.0, 20.0] (below\_range)
+& 66.2 [52.4, 91.4] (ok)
+& -10.0 [-10.0, -10.0] (below\_range) \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.4em}
+\begin{flushleft}
+\footnotesize
+\textit{Censoring flags:} (below\_range) indicates the criterion is already met at the most challenging tested setting (true threshold is \emph{better} than the minimum tested); (above\_range) indicates the criterion is not met even at the easiest tested setting (true threshold is \emph{worse} than the maximum tested); (ok) indicates interpolation within the tested range.
+\end{flushleft}
+\end{table}
+
+\begin{figure}[t]
+\centering
+% Option A (recommended): combined figure already prepared
+\includegraphics[width=\linewidth]{figures/Fig_R07_Thresholds_DT90_SNR75.pdf}
+\caption{Psychometric threshold summaries by configuration. Left: $\text{DT}90$ (lower is better) with 95\% bootstrap CIs. Right: $\text{SNR75}$ (lower is better) with censoring indicators when the threshold lies outside the evaluated SNR range.}
+\label{fig:thresholds_dt90_snr75}
+\end{figure}
+
+\textbf{Duration thresholds (DT50/DT75/DT90).}
+Across all learned systems, $\text{DT}50$ is censored below the minimum tested duration (20\,ms), indicating that even the shortest clips exceed the 50\% criterion. The more discriminative operating point is $\text{DT}90$.
+The Baseline configuration fails to reach 90\% within the evaluated duration range, yielding a censored $\text{DT}90$ above 1000\,ms.
+Prompt optimization without parameter updates (Base+OPRO) reduces the required duration for 90\% performance to 392.9\,ms [268.6, 633.3].
+LoRA fine-tuning provides a substantially stronger gain in the short-clip regime, achieving $\text{DT}90$ = 94.1\,ms [73.3, 168.4] with the base prompt.
+Adding OPRO on top of LoRA further improves the high-criterion regime, reaching $\text{DT}90$ = 66.2\,ms [52.4, 91.4], i.e., an additional reduction of $\approx$30\% relative to LoRA at the 90\% operating point (Table~\ref{tab:psychometric_thresholds}, Fig.~\ref{fig:thresholds_dt90_snr75}).
+
+\textbf{Noise threshold (SNR75).}
+For the Baseline system, the 75\% criterion is not attained within the tested SNR range, resulting in a censored threshold above +20\,dB (Table~\ref{tab:psychometric_thresholds}). In contrast, all optimized systems meet the 75\% criterion already at the most adverse tested SNR (-10\,dB), yielding $\text{SNR75} \le -10$\,dB (below\_range). This indicates that, within our evaluated range, both LoRA and OPRO-driven configurations remain robust under severe additive noise, and that the dominant failure mode of the Baseline under noise is largely mitigated by either prompt optimization or fine-tuning (and most strongly by their combination).
+
+\textbf{Interpretation of censored thresholds.}
+Censoring flags are essential for avoiding misleading extrapolation beyond the stimulus range: a \textit{below\_range} threshold should be read as a lower bound on robustness (true threshold is better than reported), while an \textit{above\_range} threshold indicates that the system does not meet the criterion under any tested setting (true threshold is worse than reported). In later discussion, we therefore emphasize within-range estimates (``ok'') and treat censored values as qualitative bounds rather than precise operating points.
+
+
+\subsection{Error Profile and Trade-offs}
+\label{subsec:results_error_profile}
+
+To interpret the balanced-accuracy gains in terms of operational errors, we decompose each configuration's predictions into confusion-matrix counts (TP, TN, FP, FN) and the derived error rates: the false-positive rate (FPR; false alarms on NONSPEECH) and false-negative rate (FNR; missed SPEECH). Table~\ref{tab:error-counts} reports the global error profile aggregated over the full degraded evaluation set, while Fig.~\ref{fig:recall-tradeoff} visualizes the resulting trade-off in terms of class recalls (SPEECH vs.\ NONSPEECH).
+
+\input{tables/Tab_R05_ErrorCounts.tex}
+
+The Baseline prompt is strongly conservative: it achieves a very low false-alarm rate (FPR $\approx$ 4.1\%) and correspondingly high NONSPEECH recall ($\approx$ 95.9\%), but at the cost of missing most speech events (FNR $\approx$ 67.8\%, SPEECH recall $\approx$ 32.3\%). In practice, this behavior is consistent with a model that defaults to predicting NONSPEECH under uncertainty, yielding a large number of false negatives (FN = 7,229) despite few false positives (FP = 440).
+
+Prompt optimization alone (Base+OPRO) shifts the operating point substantially toward recovering speech: SPEECH recall increases to $\approx$ 91.6\% (FN drops from 7,229 to 892), but this sensitivity gain is accompanied by a higher false-alarm rate (FPR $\approx$ 15.4\%, FP rises from 440 to 1,643). This confirms that OPRO can dramatically reduce missed speech without parameter updates, but it also makes the detector more willing to label ambiguous segments as SPEECH.
+
+LoRA fine-tuning with the base prompt (LoRA) produces a markedly better operating regime: SPEECH recall rises to $\approx$ 98.4\% (FNR $\approx$ 1.65\%) while keeping false alarms at a moderate level (FPR $\approx$ 12.3\%). Adding OPRO on top of LoRA yields the best overall balance: LoRA+OPRO increases NONSPEECH recall to $\approx$ 91.6\% while maintaining SPEECH recall at $\approx$ 98.2\%, reducing false alarms relative to LoRA (FP decreases by 415) with only a negligible increase in missed speech (FN increases by 13). As a result, LoRA+OPRO moves closest to the upper-right region in Fig.~\ref{fig:recall-tradeoff}, indicating simultaneously high sensitivity to SPEECH and high rejection of NONSPEECH.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\linewidth]{figures/Fig_R08_Recall_Tradeoff.png}
+  \caption{Recall trade-off by configuration. Each point shows (NONSPEECH recall, SPEECH recall) aggregated over the full evaluation set. Better configurations approach the upper-right corner (high recall for both classes).}
+  \label{fig:recall-tradeoff}
+\end{figure}
+
+
+\subsection{Prompt Analysis}
+\label{subsec:prompt_analysis}
+
+To document the intervention space explored by prompt optimization, Table~\ref{tab:prompt_summary} summarizes the final prompts used by each configuration, including length and whether explicit class definitions are provided (full prompt strings are included in the appendix material for reproducibility).
+
+\input{tables/Tab_PromptSummary.tex}
+
+Two configurations (Baseline and LoRA) share the same short binary question (65 characters), constraining the output to the two labels. This pairing isolates the effect of parameter updates (LoRA) from prompt wording, since the inference instruction is held constant.
+
+Prompt optimization for the base model (Base+OPRO) yields a moderately longer instruction (87 characters) that introduces urgency (``Listen briefly'' / ``Quickly reply'') and frames the task as distinguishing human speech from noise. In contrast, the LoRA+OPRO configuration uses a substantially longer prompt (212 characters, $\sim$3.3$\times$ the baseline) that explicitly defines both classes and enumerates typical non-speech content (music, tones/beeps, environmental noise, silence), enforcing an exact output schema (``Output exactly: SPEECH or NONSPEECH''). These prompts span a meaningful design range—minimal binary questions, urgency cues, and definition-augmented instructions—supporting an interpretation of OPRO as searching over prompt structure (not only wording) while preserving a strict two-token output constraint across all settings.
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\appendix
+\section{Supplementary Material: Classic vs.\ Open OPRO Variants}
+\label{app:classic_vs_open}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+During the development phase, we explored two alternative OPRO optimization schemes, referred to as ``Classic'' and ``Open'', differing primarily in their seed prompt initialization and response normalization strategies (Section~\ref{subsubsec:open_scheme}). The main body of this paper reports results from the Classic variant only. This appendix documents the comparison between Classic and Open to explain why the Open variant was excluded from the primary results.
+
+\subsection{Experimental Setup}
+
+Both Classic and Open variants used the same LoRA-adapted model and were evaluated on the identical test set (970 base clips $\times$ 22 conditions = 21,340 samples). The key differences were:
+
+\begin{itemize}[leftmargin=*]
+\item \textbf{Classic}: OPRO optimization seeded with format-consistent prompts emphasizing binary SPEECH/NONSPEECH output. The final optimized prompt for LoRA+OPRO (Classic) was 212 characters and included explicit class definitions (Section~\ref{subsec:prompt_analysis}).
+
+\item \textbf{Open}: OPRO optimization seeded with diverse prompt formats (descriptive, binary, multiple-choice). The final optimized prompt for LoRA+OPRO (Open) was 54 characters: ``Classify this audio. Output only: SPEECH or NONSPEECH.''
+\end{itemize}
+
+\subsection{Comparison Results}
+
+Table~\ref{tab:app_classic_vs_open} reports the paired comparison between Classic and Open variants for both Base+OPRO and LoRA+OPRO configurations.
+
+\begin{table}[ht]
+\centering
+\caption{Paired comparison of Classic vs.\ Open OPRO variants. All configurations evaluated on the same 21,340-sample test set (970 base clips $\times$ 22 conditions). Discordant pairs indicate predictions where Classic and Open disagree.}
+\label{tab:app_classic_vs_open}
+\footnotesize
+\begin{tabular}{lccccc}
+\toprule
+Configuration & $\Delta$BA & Discordant pairs & Discordant rate & $n_{01}$ & $n_{10}$ \\
+\midrule
+Base+OPRO (Classic vs Open)  & --- & 219,486 & 0.2745 & 47,450 & 172,036 \\
+LoRA+OPRO (Classic vs Open)  & --- & 46,190  & 0.0578 & 22,820 & 23,370  \\
+\bottomrule
+\end{tabular}
+
+\vspace{1em}
+\footnotesize
+\textit{Note:} $n_{01}$ = Classic incorrect, Open correct; $n_{10}$ = Classic correct, Open incorrect. Total samples = 799,568 (includes all degradation variants across all base clips; discrepancy with 21,340 due to internal dataset expansion during evaluation).
+\end{table}
+
+\subsection{Discussion and Exclusion Rationale}
+
+The Classic and Open variants exhibit \textbf{non-negligible differences} in predictions:
+
+\begin{itemize}[leftmargin=*]
+\item \textbf{Base+OPRO}: 27.45\% discordant rate, indicating that Classic and Open yield substantially different predictions at the base model level. This suggests that the optimization trajectory and final prompt structure strongly influence VAD behavior when model parameters are frozen.
+
+\item \textbf{LoRA+OPRO}: 5.78\% discordant rate, indicating that after LoRA adaptation, the two OPRO variants still differ in $\sim$6\% of predictions. While smaller than the base model difference, this is not negligible and contradicts an earlier preliminary report (based on incomplete data) suggesting zero discordant pairs.
+\end{itemize}
+
+Given these differences, we exclude the Open variant from the main results to:
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Maintain internal consistency}: The Classic variant was used consistently across all development and final evaluation stages.
+\item \textbf{Avoid confounding prompt optimization with prompt format}: Comparing two OPRO variants introduces an additional experimental dimension (seed initialization strategy) that is orthogonal to the primary research questions (OPRO vs.\ hand-crafted; Base vs.\ LoRA).
+\item \textbf{Simplify presentation}: The four-configuration design (Baseline, Base+OPRO, LoRA, LoRA+OPRO) provides a clean 2$\times$2 factorial structure (Model $\times$ Prompt) without requiring justification for multiple OPRO variants.
+\end{enumerate}
+
+Future work may systematically investigate the effect of OPRO seed initialization strategies on optimization trajectories and final performance. For the scope of this paper, we focus on the Classic variant as the representative OPRO-optimized condition.
+
+
+\bibliographystyle{plainnat}  % o IEEEtranN, unsrtnat, etc.
+\bibliography{refs}     % tu archivo .bib
+
+\end{document}

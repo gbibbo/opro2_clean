@@ -29,6 +29,48 @@ from tqdm import tqdm
 # PART 1: Data Loading and Preparation
 # ============================================================================
 
+def canonicalize_label(label: str) -> str:
+    """
+    Canonicalize label to strict SPEECH, NONSPEECH, or UNKNOWN format.
+
+    Handles variants like:
+    - 'SPEECH', 'speech', 'Speech'
+    - 'NONSPEECH', 'NON-SPEECH', 'NON_SPEECH', 'NON SPEECH', 'nonspeech'
+    - 'UNKNOWN', 'unknown' (model abstained from prediction)
+    - Trailing punctuation: 'NONSPEECH.', 'SPEECH!'
+
+    Args:
+        label: Raw label string
+
+    Returns:
+        Canonical label: 'SPEECH', 'NONSPEECH', or 'UNKNOWN'
+
+    Raises:
+        ValueError: If label cannot be mapped to known classes
+    """
+    if not isinstance(label, str):
+        raise ValueError(f"Label must be string, got {type(label)}: {label}")
+
+    # Uppercase, strip whitespace, remove trailing punctuation
+    canonical = label.upper().strip().rstrip('.,!?;:')
+
+    # Collapse separators (-, _, spaces) to nothing
+    canonical = canonical.replace('-', '').replace('_', '').replace(' ', '')
+
+    # Map to valid classes
+    if canonical == 'SPEECH':
+        return 'SPEECH'
+    elif canonical == 'NONSPEECH':
+        return 'NONSPEECH'
+    elif canonical == 'UNKNOWN':
+        return 'UNKNOWN'
+    else:
+        raise ValueError(
+            f"Unknown label '{label}' (canonicalized to '{canonical}'). "
+            f"Valid labels: SPEECH, NONSPEECH, UNKNOWN"
+        )
+
+
 def extract_clip_id(audio_path: str) -> str:
     """
     Extract base clip ID from audio path.
@@ -64,16 +106,42 @@ def load_predictions(csv_path: str) -> pd.DataFrame:
         - clip_id: base clip identifier
         - condition: condition key (e.g., 'dur_20ms', 'snr_-10dB')
         - variant_type: type of degradation (duration, snr, reverb, filter)
-        - ground_truth: SPEECH or NONSPEECH
-        - prediction: SPEECH or NONSPEECH
+        - ground_truth: SPEECH or NONSPEECH (canonicalized)
+        - prediction: SPEECH or NONSPEECH (canonicalized)
         - correct: boolean, whether prediction matches ground truth
+
+    Notes:
+        - Rows where prediction == 'UNKNOWN' are filtered out with a warning
+        - UNKNOWN indicates the model abstained from making a prediction
+
+    Raises:
+        ValueError: If any label cannot be canonicalized to SPEECH, NONSPEECH, or UNKNOWN
     """
     df = pd.read_csv(csv_path)
+    n_total = len(df)
 
     # Extract clip_id
     df['clip_id'] = df['audio_path'].apply(extract_clip_id)
 
-    # Add correctness flag
+    # Canonicalize labels (strict validation - will raise if unknown label)
+    df['ground_truth_canon'] = df['ground_truth'].apply(canonicalize_label)
+    df['prediction_canon'] = df['prediction'].apply(canonicalize_label)
+
+    # Replace original columns with canonical versions
+    df['ground_truth'] = df['ground_truth_canon']
+    df['prediction'] = df['prediction_canon']
+    df.drop(columns=['ground_truth_canon', 'prediction_canon'], inplace=True)
+
+    # Filter out UNKNOWN predictions (model abstained)
+    unknown_mask = (df['prediction'] == 'UNKNOWN') | (df['ground_truth'] == 'UNKNOWN')
+    n_unknown = unknown_mask.sum()
+
+    if n_unknown > 0:
+        print(f"  ⚠️  WARNING: Filtered {n_unknown}/{n_total} samples with UNKNOWN labels "
+              f"({100*n_unknown/n_total:.2f}%)")
+        df = df[~unknown_mask].copy()
+
+    # Add correctness flag using canonical labels
     df['correct'] = (df['ground_truth'] == df['prediction']).astype(int)
 
     return df
@@ -200,21 +268,19 @@ def cluster_bootstrap_ba(
     """
     rng = np.random.RandomState(random_state)
 
-    # Get unique clip IDs
-    unique_clips = df['clip_id'].unique()
-    n_clips = len(unique_clips)
+    # Precompute groups (much faster than repeated filtering)
+    groups = [group for _, group in df.groupby('clip_id', sort=False)]
+    n_clips = len(groups)
 
     ba_point = compute_ba(df)
     ba_samples = []
 
     for _ in tqdm(range(n_bootstrap), desc="Bootstrap BA", leave=False):
-        # Resample clips with replacement
-        sampled_clips = rng.choice(unique_clips, size=n_clips, replace=True)
+        # Resample clip indices with replacement
+        sampled_idx = rng.choice(n_clips, size=n_clips, replace=True)
 
         # Build resampled dataset
-        resampled_df = pd.concat([
-            df[df['clip_id'] == clip_id] for clip_id in sampled_clips
-        ], ignore_index=True)
+        resampled_df = pd.concat([groups[i] for i in sampled_idx], ignore_index=True)
 
         # Compute BA on resampled data
         ba_boot = compute_ba(resampled_df)
@@ -247,7 +313,15 @@ def cluster_bootstrap_delta_ba(
     clips_a = set(df_a['clip_id'].unique())
     clips_b = set(df_b['clip_id'].unique())
     unique_clips = sorted(clips_a & clips_b)
-    n_clips = len(unique_clips)
+
+    # Precompute groups for both datasets
+    groups_a = {clip_id: group for clip_id, group in df_a.groupby('clip_id', sort=False)}
+    groups_b = {clip_id: group for clip_id, group in df_b.groupby('clip_id', sort=False)}
+
+    # Keep only clips in both datasets
+    groups_a = [groups_a[clip_id] for clip_id in unique_clips]
+    groups_b = [groups_b[clip_id] for clip_id in unique_clips]
+    n_clips = len(groups_a)
 
     # Point estimate
     ba_a = compute_ba(df_a)
@@ -257,17 +331,12 @@ def cluster_bootstrap_delta_ba(
     delta_samples = []
 
     for _ in tqdm(range(n_bootstrap), desc="Bootstrap ΔBA", leave=False):
-        # Resample clips (SAME for both)
-        sampled_clips = rng.choice(unique_clips, size=n_clips, replace=True)
+        # Resample clip indices (SAME for both)
+        sampled_idx = rng.choice(n_clips, size=n_clips, replace=True)
 
         # Build resampled datasets
-        resampled_a = pd.concat([
-            df_a[df_a['clip_id'] == clip_id] for clip_id in sampled_clips
-        ], ignore_index=True)
-
-        resampled_b = pd.concat([
-            df_b[df_b['clip_id'] == clip_id] for clip_id in sampled_clips
-        ], ignore_index=True)
+        resampled_a = pd.concat([groups_a[i] for i in sampled_idx], ignore_index=True)
+        resampled_b = pd.concat([groups_b[i] for i in sampled_idx], ignore_index=True)
 
         # Compute ΔBA
         ba_boot_a = compute_ba(resampled_a)
@@ -328,7 +397,8 @@ def mcnemar_exact_test(df_a: pd.DataFrame, df_b: pd.DataFrame) -> Dict:
         p_value = 1.0
     else:
         # Two-tailed: test if n_01 differs from n_10
-        p_value = stats.binom_test(n_01, n=n_discordant, p=0.5, alternative='two-sided')
+        # Use binomtest (binom_test is deprecated in scipy >= 1.7)
+        p_value = stats.binomtest(k=n_01, n=n_discordant, p=0.5, alternative='two-sided').pvalue
 
     return {
         'n_00': int(n_00),
@@ -465,13 +535,58 @@ def run_primary_comparisons(
 # PART 7: Psychometric Thresholds
 # ============================================================================
 
+def parse_variant_value(variant_type: str, condition: str, audio_path: str) -> float:
+    """
+    Robustly parse variant severity value from condition or audio path.
+
+    Handles multiple formats:
+    - Duration: 'dur_20ms', 'dur20ms', 'dur_20.5ms'
+    - SNR: 'snr_-10dB', 'snr-10dB', 'snr_+10dB', 'snr10db' (case-insensitive)
+
+    Args:
+        variant_type: 'duration' or 'snr'
+        condition: Condition string (e.g., 'dur_20ms', 'snr_-10dB')
+        audio_path: Full audio path (fallback if condition doesn't match)
+
+    Returns:
+        Numeric value (float), or np.nan if no match
+    """
+    import re
+
+    if variant_type == 'duration':
+        # Match: dur_20ms, dur20ms, dur_20.5ms (with/without underscore)
+        pattern = r'dur_?(\d+(?:\.\d+)?)ms'
+    elif variant_type == 'snr':
+        # Match: snr_-10dB, snr-10dB, snr+10dB, snr10db (case-insensitive)
+        pattern = r'snr_?([+-]?\d+(?:\.\d+)?)d[bB]'
+    else:
+        return np.nan
+
+    # Try condition first
+    match = re.search(pattern, condition, re.IGNORECASE)
+    if match:
+        return float(match.group(1))
+
+    # Fallback: try audio filename
+    filename = os.path.basename(audio_path)
+    match = re.search(pattern, filename, re.IGNORECASE)
+    if match:
+        return float(match.group(1))
+
+    # No match
+    return np.nan
+
+
 def estimate_threshold_linear(
     values: np.ndarray,
     accuracies: np.ndarray,
     target_acc: float
-) -> Optional[float]:
+) -> Tuple[Optional[float], str]:
     """
-    Estimate threshold via linear interpolation.
+    Estimate threshold via linear interpolation with censoring support.
+
+    In psychophysics, if the target accuracy is outside the tested range,
+    we report a censored threshold at the boundary rather than "undefined".
 
     Args:
         values: Ordered condition values (e.g., durations in ms, SNRs in dB)
@@ -479,24 +594,30 @@ def estimate_threshold_linear(
         target_acc: Target accuracy level (e.g., 0.50, 0.75, 0.90)
 
     Returns:
-        Interpolated threshold value, or None if not achievable
+        (threshold_value, censoring_flag) where:
+        - threshold_value: Interpolated or boundary value
+        - censoring_flag: 'ok', 'below_range', 'above_range', or 'failed'
     """
     # Ensure sorted
     sorted_idx = np.argsort(values)
     x = values[sorted_idx]
     y = accuracies[sorted_idx]
 
-    # Check if target is achievable
-    if target_acc < y.min() or target_acc > y.max():
-        return None
+    # Check if target is below range (e.g., model too robust)
+    if target_acc < y.min():
+        return float(x.min()), 'below_range'
 
-    # Linear interpolation
+    # Check if target is above range (e.g., model too weak)
+    if target_acc > y.max():
+        return float(x.max()), 'above_range'
+
+    # Linear interpolation (target is within range)
     try:
         f = interp1d(y, x, kind='linear', bounds_error=False, fill_value='extrapolate')
         threshold = float(f(target_acc))
-        return threshold
+        return threshold, 'ok'
     except:
-        return None
+        return None, 'failed'
 
 
 def compute_psychometric_thresholds(
@@ -508,7 +629,7 @@ def compute_psychometric_thresholds(
     Compute psychometric thresholds (DT50/75/90 or SNR-75) for a variant type.
 
     Args:
-        df: DataFrame with variant_type, condition, correct columns
+        df: DataFrame with variant_type, condition, audio_path, correct columns
         variant_type: 'duration' or 'snr'
         targets: List of target accuracy levels
 
@@ -521,14 +642,23 @@ def compute_psychometric_thresholds(
     if len(df_variant) == 0:
         return {}
 
-    # Extract numeric values from condition
-    if variant_type == 'duration':
-        # dur_20ms -> 20
-        df_variant['value'] = df_variant['condition'].str.extract(r'dur_(\d+)ms')[0].astype(float)
-    elif variant_type == 'snr':
-        # snr_-10dB -> -10, snr_+10dB -> 10
-        df_variant['value'] = df_variant['condition'].str.extract(r'snr_([+-]?\d+)dB')[0].astype(float)
-    else:
+    # Extract numeric values using robust parser
+    df_variant['value'] = df_variant.apply(
+        lambda row: parse_variant_value(variant_type, row['condition'], row['audio_path']),
+        axis=1
+    )
+
+    # Drop rows where value couldn't be parsed
+    df_variant = df_variant.dropna(subset=['value'])
+
+    if len(df_variant) == 0:
+        print(f"  WARNING: No valid {variant_type} values found after parsing")
+        return {}
+
+    # Check if we have enough unique values for interpolation
+    unique_values = df_variant['value'].nunique()
+    if unique_values < 2:
+        print(f"  WARNING: {variant_type} has only {unique_values} unique value(s), cannot compute thresholds")
         return {}
 
     # Compute accuracy per condition
@@ -538,10 +668,13 @@ def compute_psychometric_thresholds(
 
     thresholds = {}
     for target in targets:
-        thresh = estimate_threshold_linear(values, accuracies, target)
-        if thresh is not None:
+        thresh_value, censoring = estimate_threshold_linear(values, accuracies, target)
+        if thresh_value is not None and censoring != 'failed':
             key = f"{'DT' if variant_type == 'duration' else 'SNR'}{int(target * 100)}"
-            thresholds[key] = float(thresh)
+            thresholds[key] = {
+                'point': float(thresh_value),
+                'censoring': censoring
+            }
 
     return thresholds
 
@@ -557,7 +690,7 @@ def cluster_bootstrap_thresholds(
     Compute psychometric thresholds with cluster bootstrap 95% CIs.
 
     Returns:
-        Dict with {threshold_name: {'point': value, 'ci': (lower, upper)}}
+        Dict with {threshold_name: {'point': value, 'censoring': flag, 'ci': (lower, upper)}}
     """
     rng = np.random.RandomState(random_state)
 
@@ -565,36 +698,39 @@ def cluster_bootstrap_thresholds(
     unique_clips = df['clip_id'].unique()
     n_clips = len(unique_clips)
 
-    # Point estimates
+    # Point estimates (now returns dict with 'point' and 'censoring')
     point_thresholds = compute_psychometric_thresholds(df, variant_type, targets)
 
     if not point_thresholds:
         return {}
 
-    # Bootstrap
+    # Precompute groups (much faster than repeated filtering)
+    groups = [group for _, group in df.groupby('clip_id', sort=False)]
+
+    # Bootstrap (collect only numeric values for CI computation)
     bootstrap_thresholds = {key: [] for key in point_thresholds.keys()}
 
     for _ in tqdm(range(n_bootstrap), desc=f"Bootstrap {variant_type} thresholds", leave=False):
-        # Resample clips
-        sampled_clips = rng.choice(unique_clips, size=n_clips, replace=True)
+        # Resample clip indices
+        sampled_idx = rng.choice(n_clips, size=n_clips, replace=True)
 
-        resampled_df = pd.concat([
-            df[df['clip_id'] == clip_id] for clip_id in sampled_clips
-        ], ignore_index=True)
+        # Build resampled dataset
+        resampled_df = pd.concat([groups[i] for i in sampled_idx], ignore_index=True)
 
         # Compute thresholds on resampled data
         boot_thresholds = compute_psychometric_thresholds(resampled_df, variant_type, targets)
 
         for key in point_thresholds.keys():
             if key in boot_thresholds:
-                bootstrap_thresholds[key].append(boot_thresholds[key])
+                # Extract numeric point value
+                bootstrap_thresholds[key].append(boot_thresholds[key]['point'])
             else:
                 # Threshold not achievable in this resample
                 bootstrap_thresholds[key].append(np.nan)
 
     # Compute CIs
     results = {}
-    for key, point_val in point_thresholds.items():
+    for key, point_info in point_thresholds.items():
         boot_samples = np.array(bootstrap_thresholds[key])
         boot_samples = boot_samples[~np.isnan(boot_samples)]
 
@@ -602,10 +738,12 @@ def cluster_bootstrap_thresholds(
             ci_lower = np.percentile(boot_samples, 2.5)
             ci_upper = np.percentile(boot_samples, 97.5)
         else:
-            ci_lower = ci_upper = point_val
+            # No valid bootstrap samples - use point estimate
+            ci_lower = ci_upper = point_info['point']
 
         results[key] = {
-            'point': point_val,
+            'point': point_info['point'],
+            'censoring': point_info['censoring'],
             'ci': (float(ci_lower), float(ci_upper))
         }
 
@@ -638,6 +776,16 @@ def run_full_analysis(
     print("LOADING DATA")
     print("=" * 80)
     configs = load_multiple_configs(config_paths)
+
+    # Create canonical aliases to avoid KeyError in comparisons
+    # (CLI may pass 'lora_opro_classic' but comparisons expect 'lora_opro')
+    if 'lora_opro_classic' in configs and 'lora_opro' not in configs:
+        configs['lora_opro'] = configs['lora_opro_classic']
+        print("  Created alias: lora_opro -> lora_opro_classic")
+
+    if 'base_opro_classic' in configs and 'base_opro' not in configs:
+        configs['base_opro'] = configs['base_opro_classic']
+        print("  Created alias: base_opro -> base_opro_classic")
 
     # ========================================================================
     # 1. Per-Configuration Metrics
@@ -730,10 +878,12 @@ def run_full_analysis(
 
         # Print results
         for key, val in dt_thresholds.items():
-            print(f"    {key}: {val['point']:.2f} ms, 95% CI: [{val['ci'][0]:.2f}, {val['ci'][1]:.2f}]")
+            censoring_note = f" [{val['censoring']}]" if val['censoring'] != 'ok' else ''
+            print(f"    {key}: {val['point']:.2f} ms, 95% CI: [{val['ci'][0]:.2f}, {val['ci'][1]:.2f}]{censoring_note}")
 
         for key, val in snr_thresholds.items():
-            print(f"    {key}: {val['point']:.2f} dB, 95% CI: [{val['ci'][0]:.2f}, {val['ci'][1]:.2f}]")
+            censoring_note = f" [{val['censoring']}]" if val['censoring'] != 'ok' else ''
+            print(f"    {key}: {val['point']:.2f} dB, 95% CI: [{val['ci'][0]:.2f}, {val['ci'][1]:.2f}]{censoring_note}")
 
     # ========================================================================
     # 4. Save Results
@@ -816,14 +966,16 @@ def generate_text_report(results: Dict, output_path: str):
             if 'duration' in thresholds:
                 f.write("  Duration thresholds:\n")
                 for key, val in thresholds['duration'].items():
+                    censoring_note = f" [{val['censoring']}]" if val['censoring'] != 'ok' else ''
                     f.write(f"    {key}: {val['point']:.2f} ms "
-                           f"[{val['ci'][0]:.2f}, {val['ci'][1]:.2f}]\n")
+                           f"[{val['ci'][0]:.2f}, {val['ci'][1]:.2f}]{censoring_note}\n")
 
             if 'snr' in thresholds:
                 f.write("  SNR thresholds:\n")
                 for key, val in thresholds['snr'].items():
+                    censoring_note = f" [{val['censoring']}]" if val['censoring'] != 'ok' else ''
                     f.write(f"    {key}: {val['point']:.2f} dB "
-                           f"[{val['ci'][0]:.2f}, {val['ci'][1]:.2f}]\n")
+                           f"[{val['ci'][0]:.2f}, {val['ci'][1]:.2f}]{censoring_note}\n")
 
             f.write("\n")
 

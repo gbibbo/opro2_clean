@@ -1,71 +1,82 @@
 #!/bin/bash
 #SBATCH --job-name=stats_analysis
-#SBATCH --output=logs/08_statistical_analysis_%j.out
-#SBATCH --error=logs/08_statistical_analysis_%j.err
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=8
+#SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/08_statistical_analysis_%j.out
+#SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/08_statistical_analysis_%j.err
+#SBATCH --partition=3090
+#SBATCH --gres=gpu:0
+#SBATCH --cpus-per-task=16
 #SBATCH --mem=64G
-#SBATCH --time=04:00:00
+#SBATCH --time=12:00:00
 
+# =============================================================================
 # Statistical Analysis Job
+# =============================================================================
 # Runs rigorous statistical analysis on all model predictions
-# Usage: sbatch slurm/08_statistical_analysis.job [SEED]
+# Performs 4 primary comparisons with McNemar + Holm-Bonferroni correction
+# Bootstrap CI (10,000 resamples) for BA and ΔBA
+# Usage: sbatch slurm/08_statistical_analysis.job
+# =============================================================================
 
-SEED=${1:-42}
+set -euo pipefail
+set -x
+
+SEED=42
+REPO_CLEAN="/mnt/fast/nobackup/users/gb0048/opro2_clean"
+REPO_DATA="/mnt/fast/nobackup/users/gb0048/opro2"
+CONTAINER="$REPO_DATA/qwen_pipeline_v2.sif"
 
 echo "========================================================================"
-echo "Statistical Analysis - Seed ${SEED}"
+echo "Statistical Analysis - Complete"
 echo "========================================================================"
 echo "Job ID: $SLURM_JOB_ID"
 echo "Node: $SLURMD_NODENAME"
 echo "Start time: $(date)"
 echo ""
 
-# Activate environment
-source ~/.bashrc
-conda activate opro2 || { echo "Failed to activate conda environment"; exit 1; }
+cd "$REPO_CLEAN"
+mkdir -p logs
+mkdir -p results/statistical_analysis
 
-# Project root
-cd /mnt/fast/nobackup/users/gb0048/opro2_clean || exit 1
+# Define prediction file paths
+BASELINE="${REPO_CLEAN}/results/complete_pipeline_seed42/01_baseline/predictions.csv"
+LORA="${REPO_CLEAN}/results/complete_pipeline_seed42/03_eval_lora/predictions.csv"
+BASE_OPRO="${REPO_CLEAN}/results/complete_pipeline_seed42/06_eval_base_opro/predictions.csv"
+LORA_OPRO="${REPO_CLEAN}/results/complete_pipeline_seed42/07_eval_lora_opro/predictions.csv"
+LORA_OPRO_OPEN="${REPO_CLEAN}/results/complete_pipeline_seed42_opro_open/07_eval_lora_opro/predictions.csv"
 
-# Results directory
-RESULTS_DIR="results/complete_pipeline_seed${SEED}"
-OUTPUT_DIR="${RESULTS_DIR}/08_statistical_analysis"
-
-echo "Results directory: ${RESULTS_DIR}"
-echo "Output directory: ${OUTPUT_DIR}"
-echo ""
-
-# Check if prediction files exist
-BASELINE="${RESULTS_DIR}/01_baseline/predictions.csv"
-BASE_OPRO="${RESULTS_DIR}/06_eval_base_opro/predictions.csv"
-LORA="${RESULTS_DIR}/03_eval_lora/predictions.csv"
-LORA_OPRO="${RESULTS_DIR}/07_eval_lora_opro/predictions.csv"
+OUTPUT_DIR="${REPO_CLEAN}/results/statistical_analysis"
 
 echo "Checking prediction files..."
-for FILE in "$BASELINE" "$BASE_OPRO" "$LORA" "$LORA_OPRO"; do
+for FILE in "$BASELINE" "$LORA" "$BASE_OPRO" "$LORA_OPRO" "$LORA_OPRO_OPEN"; do
     if [ -f "$FILE" ]; then
-        echo "  ✓ Found: $FILE"
+        echo "  ✓ $FILE"
     else
-        echo "  ✗ Missing: $FILE"
-        echo "ERROR: Required prediction file not found!"
+        echo "  ✗ MISSING: $FILE"
         exit 1
     fi
 done
 echo ""
 
-# Run statistical analysis
 echo "Running statistical analysis..."
-echo "  Bootstrap resamples: 10,000"
+echo "  Primary comparisons: 4"
+echo "    1. Baseline vs Base+OPRO"
+echo "    2. Baseline vs LoRA+BasePrompt"
+echo "    3. LoRA+BasePrompt vs LoRA+OPRO"
+echo "    4. LoRA+OPRO_Classic vs LoRA+OPRO_Open"
+echo ""
+echo "  Bootstrap samples: 10,000"
 echo "  Random seed: ${SEED}"
+echo "  Output: ${OUTPUT_DIR}"
 echo ""
 
-python scripts/statistical_analysis.py \
+apptainer exec \
+    --pwd "$REPO_CLEAN" \
+    "$CONTAINER" python3 scripts/statistical_analysis.py \
     --baseline "${BASELINE}" \
-    --base_opro "${BASE_OPRO}" \
     --lora "${LORA}" \
+    --base_opro "${BASE_OPRO}" \
     --lora_opro "${LORA_OPRO}" \
+    --lora_opro_open "${LORA_OPRO_OPEN}" \
     --output_dir "${OUTPUT_DIR}" \
     --n_bootstrap 10000 \
     --seed ${SEED}

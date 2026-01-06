@@ -1,0 +1,16 @@
+\begin{table}[htbp]
+\centering
+\caption{Global Error Profile by Configuration}
+\label{tab:error-counts}
+\begin{tabular}{lrrrrrrrr}
+\toprule
+Config & TP & TN & FP & FN & FPR & FNR & Recall$_{\text{Speech}}$ & Recall$_{\text{NonSpeech}}$ \\
+\midrule
+Baseline & 3441 & 10230 & 440 & 7229 & 0.041 & 0.678 & 0.322 & 0.959 \\
+Base+OPRO & 9778 & 9027 & 1643 & 892 & 0.154 & 0.084 & 0.916 & 0.846 \\
+LoRA+Hand & 10494 & 9356 & 1314 & 176 & 0.123 & 0.016 & 0.984 & 0.877 \\
+LoRA+OPRO & 10481 & 9771 & 899 & 189 & 0.084 & 0.018 & 0.982 & 0.916 \\
+LoRA+OPRO-Open & 10481 & 9746 & 899 & 189 & 0.084 & 0.018 & 0.982 & 0.916 \\
+\bottomrule
+\end{tabular}
+\end{table}

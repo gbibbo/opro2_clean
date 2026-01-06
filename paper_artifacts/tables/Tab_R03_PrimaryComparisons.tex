@@ -1,0 +1,20 @@
+\begin{table}[htbp]
+\centering
+\caption{Primary Paired Comparisons: Statistical Significance Tests}
+\label{tab:primary_comparisons}
+\begin{tabular}{lcccccccc}
+\toprule
+Comparison & $\Delta$BA & 95\% CI & $p$ (raw) & $p$ (Holm) & Sig. & Disc. Rate & $n_{01}$/$n_{10}$ \\
+\midrule
+    Baseline vs Base+OPRO (Classic) & -0.2406 & [-0.2574, -0.2233] & 0.00e+00 & 0.00e+00 & Yes & 0.378 & 1471/6605 \\
+    Baseline vs LoRA (Hand-crafted) & -0.2896 & [-0.3027, -0.2760] & 0.00e+00 & 0.00e+00 & Yes & 0.381 & 976/7155 \\
+    LoRA vs LoRA+OPRO (Classic) & -0.0188 & [-0.0229, -0.0150] & 6.78e-78 & 1.36e-77 & Yes & 0.024 & 60/462 \\
+    LoRA+OPRO Classic vs LoRA+OPRO Open & 0.0001 & [0.0000, 0.0002] & 1.000 & 1.000 & No & 0.000 & 0/0 \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\small
+\item Note: $\Delta$BA = BA(A) - BA(B). McNemar's exact test with Holm correction.
+\item Discordant Rate = proportion of discordant pairs. $n_{01}$ = A incorrect, B correct; $n_{10}$ = A correct, B incorrect.
+\end{tablenotes}
+\end{table}

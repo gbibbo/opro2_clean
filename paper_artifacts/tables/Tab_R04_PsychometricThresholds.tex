@@ -1,0 +1,21 @@
+\begin{table}[ht]
+\centering
+\caption{Psychometric Thresholds (DT50/75/90 and SNR-75) with Bootstrap CIs}
+\label{tab:psychometric_thresholds}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Configuration} & \textbf{DT50 (ms)} & \textbf{DT75 (ms)} & \textbf{DT90 (ms)} & \textbf{SNR75 (dB)} \\
+\midrule
+Baseline & 20.0 [20.0, 20.0] (below_range) & 1000.0 [1000.0, 1000.0] (above_range) & 1000.0 [1000.0, 1000.0] (above_range) & 20.0 [20.0, 20.0] (above_range) \\
+Base+OPRO-C & 20.0 [20.0, 20.0] (below_range) & 36.8 [30.0, 50.2] & 392.9 [268.6, 633.3] & -10.0 [-10.0, -10.0] (below_range) \\
+LoRA+Hand & 20.0 [20.0, 20.0] (below_range) & 20.0 [20.0, 20.0] (below_range) & 94.1 [73.3, 168.4] & -10.0 [-10.0, -10.0] (below_range) \\
+LoRA+OPRO-C & 20.0 [20.0, 20.0] (below_range) & 20.0 [20.0, 20.0] (below_range) & 66.2 [52.4, 91.4] & -10.0 [-10.0, -10.0] (below_range) \\
+LoRA+OPRO-O & 20.0 [20.0, 20.0] (below_range) & 20.0 [20.0, 20.0] (below_range) & 66.2 [52.4, 91.4] & -10.0 [-10.0, -10.0] (below_range) \\
+\bottomrule
+\end{tabular}
+\vspace{0.5em}
+\begin{flushleft}
+\footnotesize
+\textit{Note:} Values shown as point estimate [95\% CI]. Flags: (below\_range) = censored below, (above\_range) = censored above, (ok) = within range.
+\end{flushleft}
+\end{table}

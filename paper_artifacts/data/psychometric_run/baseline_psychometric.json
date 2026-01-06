@@ -1,0 +1,66 @@
+{
+  "ba_clip": {
+    "point": 0.6406279287722587,
+    "ci": [
+      0.6270233450692709,
+      0.6540517324056129
+    ]
+  },
+  "recalls": {
+    "recall_speech": 0.3224929709465792,
+    "recall_speech_ci": [
+      0.31368905220096865,
+      0.3314246573651729
+    ],
+    "n_speech": 10670,
+    "recall_nonspeech": 0.9587628865979382,
+    "recall_nonspeech_ci": [
+      0.9548220316930492,
+      0.9623735288527465
+    ],
+    "n_nonspeech": 10670
+  },
+  "duration_thresholds": {
+    "DT50": {
+      "point": 20.0,
+      "censoring": "below_range",
+      "ci": [
+        20.0,
+        20.0
+      ]
+    },
+    "DT75": {
+      "point": 1000.0,
+      "censoring": "above_range",
+      "ci": [
+        1000.0,
+        1000.0
+      ]
+    },
+    "DT90": {
+      "point": 1000.0,
+      "censoring": "above_range",
+      "ci": [
+        1000.0,
+        1000.0
+      ]
+    }
+  },
+  "snr_thresholds": {
+    "SNR75": {
+      "point": 20.0,
+      "censoring": "above_range",
+      "ci": [
+        20.0,
+        20.0
+      ]
+    }
+  },
+  "n_samples": 21340,
+  "n_clips": 970,
+  "config_key": "baseline",
+  "config_name": "Baseline (Hand-crafted)",
+  "config_type": "baseline",
+  "csv_path": "/mnt/fast/nobackup/users/gb0048/opro2_clean/results/complete_pipeline_seed42/01_baseline/predictions.csv",
+  "fingerprint": "ac870b16db59c617"
+}

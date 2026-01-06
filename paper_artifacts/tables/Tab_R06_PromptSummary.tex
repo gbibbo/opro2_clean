@@ -1,0 +1,15 @@
+\begin{table}[ht]
+\centering
+\caption{Prompt Summary by Configuration}
+\label{tab:prompt_summary}
+\begin{tabular}{@{}llcp{6cm}@{}}
+\toprule
+Configuration & Length & Definitions & Preview \\
+\midrule
+baseline & 65 & No & Does this audio contain human speech? Answer SPEECH or NONSPEECH. \\
+base\_opro & 87 & No & Listen briefly; is this clip human speech or noise? Quickly reply: SPEECH or NON... \\
+lora & 65 & No & Does this audio contain human speech? Answer SPEECH or NONSPEECH. \\
+lora\_opro & 212 & Yes & Decide the dominant content. Definitions: - SPEECH = human voice, spoken words, ... \\
+\bottomrule
+\end{tabular}
+\end{table}

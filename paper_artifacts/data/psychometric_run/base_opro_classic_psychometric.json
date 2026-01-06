@@ -1,0 +1,66 @@
+{
+  "ba_clip": {
+    "point": 0.8812089971883785,
+    "ci": [
+      0.8684057609698331,
+      0.8932928030988708
+    ]
+  },
+  "recalls": {
+    "recall_speech": 0.9164011246485473,
+    "recall_speech_ci": [
+      0.9109982623553454,
+      0.9215042658377026
+    ],
+    "n_speech": 10670,
+    "recall_nonspeech": 0.8460168697282099,
+    "recall_nonspeech_ci": [
+      0.8390439953724332,
+      0.8527406848185938
+    ],
+    "n_nonspeech": 10670
+  },
+  "duration_thresholds": {
+    "DT50": {
+      "point": 20.0,
+      "censoring": "below_range",
+      "ci": [
+        20.0,
+        20.0
+      ]
+    },
+    "DT75": {
+      "point": 36.760563380281695,
+      "censoring": "ok",
+      "ci": [
+        30.0,
+        50.223423423423384
+      ]
+    },
+    "DT90": {
+      "point": 392.8571428571431,
+      "censoring": "ok",
+      "ci": [
+        268.5714285714283,
+        633.3333333333334
+      ]
+    }
+  },
+  "snr_thresholds": {
+    "SNR75": {
+      "point": -10.0,
+      "censoring": "below_range",
+      "ci": [
+        -10.0,
+        -10.0
+      ]
+    }
+  },
+  "n_samples": 21340,
+  "n_clips": 970,
+  "config_key": "base_opro_classic",
+  "config_name": "Base + OPRO (Classic)",
+  "config_type": "base_opro",
+  "csv_path": "/mnt/fast/nobackup/users/gb0048/opro2_clean/results/complete_pipeline_seed42/06_eval_base_opro/predictions.csv",
+  "fingerprint": "5c07202f6d09a3a3"
+}

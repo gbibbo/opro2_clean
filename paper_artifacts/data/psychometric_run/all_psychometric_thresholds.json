@@ -1,0 +1,337 @@
+{
+  "timestamp": "2025-12-30T01:39:16.749104",
+  "n_bootstrap": 10000,
+  "random_seed": 42,
+  "configurations": {
+    "baseline": {
+      "ba_clip": {
+        "point": 0.6406279287722587,
+        "ci": [
+          0.6270233450692709,
+          0.6540517324056129
+        ]
+      },
+      "recalls": {
+        "recall_speech": 0.3224929709465792,
+        "recall_speech_ci": [
+          0.31368905220096865,
+          0.3314246573651729
+        ],
+        "n_speech": 10670,
+        "recall_nonspeech": 0.9587628865979382,
+        "recall_nonspeech_ci": [
+          0.9548220316930492,
+          0.9623735288527465
+        ],
+        "n_nonspeech": 10670
+      },
+      "duration_thresholds": {
+        "DT50": {
+          "point": 20.0,
+          "censoring": "below_range",
+          "ci": [
+            20.0,
+            20.0
+          ]
+        },
+        "DT75": {
+          "point": 1000.0,
+          "censoring": "above_range",
+          "ci": [
+            1000.0,
+            1000.0
+          ]
+        },
+        "DT90": {
+          "point": 1000.0,
+          "censoring": "above_range",
+          "ci": [
+            1000.0,
+            1000.0
+          ]
+        }
+      },
+      "snr_thresholds": {
+        "SNR75": {
+          "point": 20.0,
+          "censoring": "above_range",
+          "ci": [
+            20.0,
+            20.0
+          ]
+        }
+      },
+      "n_samples": 21340,
+      "n_clips": 970,
+      "config_key": "baseline",
+      "config_name": "Baseline (Hand-crafted)",
+      "config_type": "baseline",
+      "csv_path": "/mnt/fast/nobackup/users/gb0048/opro2_clean/results/complete_pipeline_seed42/01_baseline/predictions.csv",
+      "fingerprint": "ac870b16db59c617"
+    },
+    "base_opro_classic": {
+      "ba_clip": {
+        "point": 0.8812089971883785,
+        "ci": [
+          0.8684057609698331,
+          0.8932928030988708
+        ]
+      },
+      "recalls": {
+        "recall_speech": 0.9164011246485473,
+        "recall_speech_ci": [
+          0.9109982623553454,
+          0.9215042658377026
+        ],
+        "n_speech": 10670,
+        "recall_nonspeech": 0.8460168697282099,
+        "recall_nonspeech_ci": [
+          0.8390439953724332,
+          0.8527406848185938
+        ],
+        "n_nonspeech": 10670
+      },
+      "duration_thresholds": {
+        "DT50": {
+          "point": 20.0,
+          "censoring": "below_range",
+          "ci": [
+            20.0,
+            20.0
+          ]
+        },
+        "DT75": {
+          "point": 36.760563380281695,
+          "censoring": "ok",
+          "ci": [
+            30.0,
+            50.223423423423384
+          ]
+        },
+        "DT90": {
+          "point": 392.8571428571431,
+          "censoring": "ok",
+          "ci": [
+            268.5714285714283,
+            633.3333333333334
+          ]
+        }
+      },
+      "snr_thresholds": {
+        "SNR75": {
+          "point": -10.0,
+          "censoring": "below_range",
+          "ci": [
+            -10.0,
+            -10.0
+          ]
+        }
+      },
+      "n_samples": 21340,
+      "n_clips": 970,
+      "config_key": "base_opro_classic",
+      "config_name": "Base + OPRO (Classic)",
+      "config_type": "base_opro",
+      "csv_path": "/mnt/fast/nobackup/users/gb0048/opro2_clean/results/complete_pipeline_seed42/06_eval_base_opro/predictions.csv",
+      "fingerprint": "5c07202f6d09a3a3"
+    },
+    "lora_hand": {
+      "ba_clip": {
+        "point": 0.930178069353327,
+        "ci": [
+          0.9207506838050297,
+          0.9387369217493274
+        ]
+      },
+      "recalls": {
+        "recall_speech": 0.9835051546391752,
+        "recall_speech_ci": [
+          0.9809085899104223,
+          0.9857536974962701
+        ],
+        "n_speech": 10670,
+        "recall_nonspeech": 0.876850984067479,
+        "recall_nonspeech_ci": [
+          0.8704798924357859,
+          0.8829508223659801
+        ],
+        "n_nonspeech": 10670
+      },
+      "duration_thresholds": {
+        "DT50": {
+          "point": 20.0,
+          "censoring": "below_range",
+          "ci": [
+            20.0,
+            20.0
+          ]
+        },
+        "DT75": {
+          "point": 20.0,
+          "censoring": "below_range",
+          "ci": [
+            20.0,
+            20.0
+          ]
+        },
+        "DT90": {
+          "point": 94.0740740740741,
+          "censoring": "ok",
+          "ci": [
+            73.33333333333333,
+            168.42927631578954
+          ]
+        }
+      },
+      "snr_thresholds": {
+        "SNR75": {
+          "point": -10.0,
+          "censoring": "below_range",
+          "ci": [
+            -10.0,
+            -10.0
+          ]
+        }
+      },
+      "n_samples": 21340,
+      "n_clips": 970,
+      "config_key": "lora_hand",
+      "config_name": "LoRA + Hand-crafted",
+      "config_type": "lora",
+      "csv_path": "/mnt/fast/nobackup/users/gb0048/opro2_clean/results/complete_pipeline_seed42/03_eval_lora/predictions.csv",
+      "fingerprint": "854e4fafa8c311cd"
+    },
+    "lora_opro_classic": {
+      "ba_clip": {
+        "point": 0.9490159325210872,
+        "ci": [
+          0.941745784569749,
+          0.9557693432815924
+        ]
+      },
+      "recalls": {
+        "recall_speech": 0.9822867853795689,
+        "recall_speech_ci": [
+          0.9796048071829624,
+          0.9846216186737617
+        ],
+        "n_speech": 10670,
+        "recall_nonspeech": 0.9157450796626054,
+        "recall_nonspeech_ci": [
+          0.9103237920823088,
+          0.9208671183530639
+        ],
+        "n_nonspeech": 10670
+      },
+      "duration_thresholds": {
+        "DT50": {
+          "point": 20.0,
+          "censoring": "below_range",
+          "ci": [
+            20.0,
+            20.0
+          ]
+        },
+        "DT75": {
+          "point": 20.0,
+          "censoring": "below_range",
+          "ci": [
+            20.0,
+            20.0
+          ]
+        },
+        "DT90": {
+          "point": 66.15384615384616,
+          "censoring": "ok",
+          "ci": [
+            52.352941176470615,
+            91.42857142857143
+          ]
+        }
+      },
+      "snr_thresholds": {
+        "SNR75": {
+          "point": -10.0,
+          "censoring": "below_range",
+          "ci": [
+            -10.0,
+            -10.0
+          ]
+        }
+      },
+      "n_samples": 21340,
+      "n_clips": 970,
+      "config_key": "lora_opro_classic",
+      "config_name": "LoRA + OPRO (Classic)",
+      "config_type": "lora_opro",
+      "csv_path": "/mnt/fast/nobackup/users/gb0048/opro2_clean/results/complete_pipeline_seed42/07_eval_lora_opro/predictions.csv",
+      "fingerprint": "b16c4bebe4a63ec2"
+    },
+    "lora_opro_open": {
+      "ba_clip": {
+        "point": 0.9489169953201273,
+        "ci": [
+          0.9416034349879652,
+          0.9556898892665605
+        ]
+      },
+      "recalls": {
+        "recall_speech": 0.9822867853795689,
+        "recall_speech_ci": [
+          0.9796048071829624,
+          0.9846216186737617
+        ],
+        "n_speech": 10670,
+        "recall_nonspeech": 0.9155472052606858,
+        "recall_nonspeech_ci": [
+          0.9101138319035844,
+          0.9206807699516077
+        ],
+        "n_nonspeech": 10645
+      },
+      "duration_thresholds": {
+        "DT50": {
+          "point": 20.0,
+          "censoring": "below_range",
+          "ci": [
+            20.0,
+            20.0
+          ]
+        },
+        "DT75": {
+          "point": 20.0,
+          "censoring": "below_range",
+          "ci": [
+            20.0,
+            20.0
+          ]
+        },
+        "DT90": {
+          "point": 66.15384615384616,
+          "censoring": "ok",
+          "ci": [
+            52.352941176470615,
+            91.42857142857143
+          ]
+        }
+      },
+      "snr_thresholds": {
+        "SNR75": {
+          "point": -10.0,
+          "censoring": "below_range",
+          "ci": [
+            -10.0,
+            -10.0
+          ]
+        }
+      },
+      "n_samples": 21315,
+      "n_clips": 970,
+      "config_key": "lora_opro_open",
+      "config_name": "LoRA + OPRO (Open)",
+      "config_type": "lora_opro_open",
+      "csv_path": "/mnt/fast/nobackup/users/gb0048/opro2_clean/results/complete_pipeline_seed42_opro_open/07_eval_lora_opro/predictions.csv",
+      "fingerprint": "25a044bd1fda75fb"
+    }
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "ba_clip": {
+    "point": 0.930178069353327,
+    "ci": [
+      0.9207506838050297,
+      0.9387369217493274
+    ]
+  },
+  "recalls": {
+    "recall_speech": 0.9835051546391752,
+    "recall_speech_ci": [
+      0.9809085899104223,
+      0.9857536974962701
+    ],
+    "n_speech": 10670,
+    "recall_nonspeech": 0.876850984067479,
+    "recall_nonspeech_ci": [
+      0.8704798924357859,
+      0.8829508223659801
+    ],
+    "n_nonspeech": 10670
+  },
+  "duration_thresholds": {
+    "DT50": {
+      "point": 20.0,
+      "censoring": "below_range",
+      "ci": [
+        20.0,
+        20.0
+      ]
+    },
+    "DT75": {
+      "point": 20.0,
+      "censoring": "below_range",
+      "ci": [
+        20.0,
+        20.0
+      ]
+    },
+    "DT90": {
+      "point": 94.0740740740741,
+      "censoring": "ok",
+      "ci": [
+        73.33333333333333,
+        168.42927631578954
+      ]
+    }
+  },
+  "snr_thresholds": {
+    "SNR75": {
+      "point": -10.0,
+      "censoring": "below_range",
+      "ci": [
+        -10.0,
+        -10.0
+      ]
+    }
+  },
+  "n_samples": 21340,
+  "n_clips": 970,
+  "config_key": "lora_hand",
+  "config_name": "LoRA + Hand-crafted",
+  "config_type": "lora",
+  "csv_path": "/mnt/fast/nobackup/users/gb0048/opro2_clean/results/complete_pipeline_seed42/03_eval_lora/predictions.csv",
+  "fingerprint": "854e4fafa8c311cd"
+}

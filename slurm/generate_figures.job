@@ -1,0 +1,52 @@
+#!/bin/bash
+#SBATCH --job-name=gen_figures
+#SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/generate_figures_%j.out
+#SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro2_clean/logs/generate_figures_%j.err
+#SBATCH --partition=3090
+#SBATCH --gres=gpu:0
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16G
+#SBATCH --time=00:30:00
+
+# =============================================================================
+# Generate Figures for Statistical Analysis Report
+# =============================================================================
+
+set -euo pipefail
+
+REPO_CLEAN="/mnt/fast/nobackup/users/gb0048/opro2_clean"
+REPO_DATA="/mnt/fast/nobackup/users/gb0048/opro2"
+CONTAINER="$REPO_DATA/qwen_pipeline_v2.sif"
+
+echo "========================================================================"
+echo "Generating Publication Figures"
+echo "========================================================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURMD_NODENAME"
+echo "Start time: $(date)"
+echo ""
+
+cd "$REPO_CLEAN"
+mkdir -p logs results/figures
+
+apptainer exec \
+    --pwd "$REPO_CLEAN" \
+    "$CONTAINER" python3 scripts/generate_figures_simple.py
+
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "========================================================================"
+    echo "FIGURES GENERATED SUCCESSFULLY"
+    echo "========================================================================"
+    echo "Output directory: results/figures/"
+    echo ""
+    ls -lh results/figures/*.png
+    echo ""
+    echo "End time: $(date)"
+else
+    echo ""
+    echo "ERROR: Figure generation failed with exit code ${EXIT_CODE}"
+    exit ${EXIT_CODE}
+fi

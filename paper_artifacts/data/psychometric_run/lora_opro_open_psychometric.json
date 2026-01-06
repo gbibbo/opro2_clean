@@ -1,0 +1,66 @@
+{
+  "ba_clip": {
+    "point": 0.9489169953201273,
+    "ci": [
+      0.9416034349879652,
+      0.9556898892665605
+    ]
+  },
+  "recalls": {
+    "recall_speech": 0.9822867853795689,
+    "recall_speech_ci": [
+      0.9796048071829624,
+      0.9846216186737617
+    ],
+    "n_speech": 10670,
+    "recall_nonspeech": 0.9155472052606858,
+    "recall_nonspeech_ci": [
+      0.9101138319035844,
+      0.9206807699516077
+    ],
+    "n_nonspeech": 10645
+  },
+  "duration_thresholds": {
+    "DT50": {
+      "point": 20.0,
+      "censoring": "below_range",
+      "ci": [
+        20.0,
+        20.0
+      ]
+    },
+    "DT75": {
+      "point": 20.0,
+      "censoring": "below_range",
+      "ci": [
+        20.0,
+        20.0
+      ]
+    },
+    "DT90": {
+      "point": 66.15384615384616,
+      "censoring": "ok",
+      "ci": [
+        52.352941176470615,
+        91.42857142857143
+      ]
+    }
+  },
+  "snr_thresholds": {
+    "SNR75": {
+      "point": -10.0,
+      "censoring": "below_range",
+      "ci": [
+        -10.0,
+        -10.0
+      ]
+    }
+  },
+  "n_samples": 21315,
+  "n_clips": 970,
+  "config_key": "lora_opro_open",
+  "config_name": "LoRA + OPRO (Open)",
+  "config_type": "lora_opro_open",
+  "csv_path": "/mnt/fast/nobackup/users/gb0048/opro2_clean/results/complete_pipeline_seed42_opro_open/07_eval_lora_opro/predictions.csv",
+  "fingerprint": "25a044bd1fda75fb"
+}

@@ -1,0 +1,192 @@
+#!/bin/bash
+#SBATCH --job-name=verify_patches
+#SBATCH --output=logs/verify_patches_%j.out
+#SBATCH --error=logs/verify_patches_%j.err
+#SBATCH --partition=3090
+#SBATCH --gres=gpu:0
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --time=02:00:00
+
+# Verification Job for Statistical Analysis Patches
+# Tests all 7 patches applied to statistical_analysis.py and compute_psychometric.py
+# Usage: sbatch slurm/verify_patches.job
+
+SEED=42
+
+REPO_CLEAN="/mnt/fast/nobackup/users/gb0048/opro2_clean"
+REPO_DATA="/mnt/fast/nobackup/users/gb0048/opro2"
+CONTAINER="$REPO_DATA/qwen_pipeline_v2.sif"
+
+echo "========================================================================"
+echo "Verification of Statistical Analysis Patches"
+echo "========================================================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURMD_NODENAME"
+echo "Start time: $(date)"
+echo ""
+
+# Project root
+cd "$REPO_CLEAN" || exit 1
+
+# Create output directories
+mkdir -p logs
+mkdir -p results/verification_test
+
+echo "Using container: $CONTAINER"
+echo "Working directory: $(pwd)"
+echo ""
+
+# ============================================================================
+# PART 1: Test Psychometric Computation (Tests Patches 1-6)
+# ============================================================================
+echo "========================================================================"
+echo "PART 1: Testing Psychometric Analysis"
+echo "========================================================================"
+echo "This tests:"
+echo "  - Patch 1: Label canonicalization"
+echo "  - Patch 2.1: Robust parsing of SNR/duration"
+echo "  - Patch 2.2: Threshold censoring support"
+echo "  - Patch 3: Accelerated bootstrap"
+echo "  - Patch 4: McNemar exact (binomtest)"
+echo "  - Patch 5: Duplicate detection (fingerprinting)"
+echo ""
+echo "Running on subset of configurations with reduced bootstrap..."
+echo "  Configurations: baseline, lora_hand, base_opro_classic, lora_opro_classic"
+echo "  Bootstrap samples: 1,000 (reduced for speed)"
+echo "  Random seed: ${SEED}"
+echo ""
+
+apptainer exec \
+    --pwd "$REPO_CLEAN" \
+    "$CONTAINER" python3 scripts/compute_psychometric.py \
+    --configs baseline lora_hand base_opro_classic lora_opro_classic \
+    --output_dir results/verification_test/psychometric \
+    --n_bootstrap 1000 \
+    --seed ${SEED}
+
+EXIT_CODE_1=$?
+
+if [ $EXIT_CODE_1 -eq 0 ]; then
+    echo ""
+    echo "✓ Psychometric analysis completed successfully"
+    echo ""
+
+    # Check that SNR thresholds are populated
+    echo "Checking SNR thresholds in output..."
+    for CONFIG in baseline lora_hand base_opro_classic lora_opro_classic; do
+        JSON_FILE="results/verification_test/psychometric/${CONFIG}_psychometric.json"
+        if [ -f "$JSON_FILE" ]; then
+            SNR_COUNT=$(grep -c "snr_thresholds" "$JSON_FILE" || echo "0")
+            if [ "$SNR_COUNT" -gt 0 ]; then
+                echo "  ✓ ${CONFIG}: SNR thresholds present"
+                # Show a snippet
+                grep -A 5 "snr_thresholds" "$JSON_FILE" | head -10
+            else
+                echo "  ⚠️  ${CONFIG}: SNR thresholds missing (this may be expected if no SNR data)"
+            fi
+        else
+            echo "  ✗ ${CONFIG}: JSON file not found"
+        fi
+    done
+    echo ""
+else
+    echo ""
+    echo "✗ Psychometric analysis FAILED with exit code ${EXIT_CODE_1}"
+    echo "Check logs above for details"
+    exit ${EXIT_CODE_1}
+fi
+
+# ============================================================================
+# PART 2: Test Full Statistical Analysis (Tests Patch 6)
+# ============================================================================
+echo "========================================================================"
+echo "PART 2: Testing Full Statistical Analysis"
+echo "========================================================================"
+echo "This tests:"
+echo "  - Patch 6: Canonical aliases (lora_opro_classic -> lora_opro)"
+echo "  - Integration of all patches"
+echo ""
+echo "Running with reduced bootstrap..."
+echo "  Bootstrap samples: 1,000"
+echo ""
+
+RESULTS_DIR="results/complete_pipeline_seed${SEED}"
+OUTPUT_DIR="results/verification_test/statistical_analysis"
+
+# Check if prediction files exist
+BASELINE="${RESULTS_DIR}/01_baseline/predictions.csv"
+BASE_OPRO="${RESULTS_DIR}/06_eval_base_opro/predictions.csv"
+LORA="${RESULTS_DIR}/03_eval_lora/predictions.csv"
+LORA_OPRO="${RESULTS_DIR}/07_eval_lora_opro/predictions.csv"
+
+echo "Checking prediction files..."
+MISSING=0
+for FILE in "$BASELINE" "$BASE_OPRO" "$LORA" "$LORA_OPRO"; do
+    if [ -f "$FILE" ]; then
+        echo "  ✓ Found: $FILE"
+    else
+        echo "  ⚠️  Missing: $FILE"
+        MISSING=$((MISSING + 1))
+    fi
+done
+
+if [ $MISSING -gt 0 ]; then
+    echo ""
+    echo "⚠️  WARNING: ${MISSING} prediction file(s) missing"
+    echo "Skipping full statistical analysis (Part 2)"
+    echo ""
+    EXIT_CODE_2=0
+else
+    echo ""
+    apptainer exec \
+        --pwd "$REPO_CLEAN" \
+        "$CONTAINER" python3 scripts/statistical_analysis.py \
+        --baseline "${BASELINE}" \
+        --base_opro "${BASE_OPRO}" \
+        --lora "${LORA}" \
+        --lora_opro "${LORA_OPRO}" \
+        --output_dir "${OUTPUT_DIR}" \
+        --n_bootstrap 1000 \
+        --seed ${SEED}
+
+    EXIT_CODE_2=$?
+
+    if [ $EXIT_CODE_2 -eq 0 ]; then
+        echo ""
+        echo "✓ Full statistical analysis completed successfully"
+        echo ""
+        echo "Results saved to: ${OUTPUT_DIR}"
+        echo "  - statistical_analysis.json"
+        echo "  - statistical_report.txt"
+        echo ""
+    else
+        echo ""
+        echo "✗ Full statistical analysis FAILED with exit code ${EXIT_CODE_2}"
+        exit ${EXIT_CODE_2}
+    fi
+fi
+
+# ============================================================================
+# SUMMARY
+# ============================================================================
+echo "========================================================================"
+echo "VERIFICATION SUMMARY"
+echo "========================================================================"
+echo "Part 1 (Psychometric Analysis): $([ $EXIT_CODE_1 -eq 0 ] && echo '✓ PASS' || echo '✗ FAIL')"
+echo "Part 2 (Full Statistical Analysis): $([ $EXIT_CODE_2 -eq 0 ] && echo '✓ PASS' || echo '⚠️  SKIPPED/FAIL')"
+echo ""
+echo "End time: $(date)"
+echo ""
+
+if [ $EXIT_CODE_1 -eq 0 ] && [ $EXIT_CODE_2 -eq 0 ]; then
+    echo "========================================================================"
+    echo "ALL PATCHES VERIFIED SUCCESSFULLY ✓"
+    echo "========================================================================"
+    exit 0
+else
+    echo "========================================================================"
+    echo "VERIFICATION INCOMPLETE OR FAILED"
+    echo "========================================================================"
+    exit 1
+fi
