@@ -23,6 +23,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.qsm.models.qwen_audio import Qwen2AudioClassifier
 from src.qsm.utils.normalize import normalize_to_binary, llm_fallback_interpret
 
+# Qwen3-Omni (requires transformers from GitHub)
+try:
+    from src.qsm.models.qwen3_omni import Qwen3OmniClassifier
+    QWEN3_AVAILABLE = True
+except ImportError:
+    QWEN3_AVAILABLE = False
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple evaluation script")
@@ -33,6 +40,8 @@ def parse_args():
     parser.add_argument("--checkpoint", type=str, default=None, help="LoRA checkpoint path")
     parser.add_argument("--batch_size", type=int, default=50, help="Batch size for processing")
     parser.add_argument("--device", type=str, default="cuda", help="Device")
+    parser.add_argument("--model_type", type=str, default="qwen2", choices=["qwen2", "qwen3_omni"],
+                        help="Model type: qwen2 (Qwen2-Audio-7B) or qwen3_omni (Qwen3-Omni-30B)")
     return parser.parse_args()
 
 
@@ -237,18 +246,36 @@ def main():
 
     # Load model
     print("\nLoading model...")
-    model = Qwen2AudioClassifier(
-        model_name="Qwen/Qwen2-Audio-7B-Instruct",
-        device=args.device,
-        torch_dtype="auto",
-        load_in_4bit=True
-    )
+    model_type = getattr(args, "model_type", "qwen2")
 
-    if args.checkpoint:
-        print(f"  Loading LoRA checkpoint: {args.checkpoint}")
-        model.model = PeftModel.from_pretrained(model.model, args.checkpoint)
-        model.model.eval()
-        print("  LoRA loaded!")
+    if model_type == "qwen3_omni":
+        if not QWEN3_AVAILABLE:
+            raise RuntimeError(
+                "Qwen3-Omni not available. Install transformers from GitHub:\n"
+                "pip install git+https://github.com/huggingface/transformers.git"
+            )
+        print("  Model type: Qwen3-Omni")
+        model = Qwen3OmniClassifier(
+            model_name="Qwen/Qwen3-Omni-30B-A3B-Instruct",
+            device=args.device,
+            torch_dtype="auto",
+        )
+        # Qwen3-Omni doesn't support LoRA
+        if args.checkpoint:
+            print("  WARNING: LoRA not supported for Qwen3-Omni, ignoring checkpoint")
+    else:
+        print("  Model type: Qwen2-Audio")
+        model = Qwen2AudioClassifier(
+            model_name="Qwen/Qwen2-Audio-7B-Instruct",
+            device=args.device,
+            torch_dtype="auto",
+            load_in_4bit=True
+        )
+        if args.checkpoint:
+            print(f"  Loading LoRA checkpoint: {args.checkpoint}")
+            model.model = PeftModel.from_pretrained(model.model, args.checkpoint)
+            model.model.eval()
+            print("  LoRA loaded!")
 
     # Evaluate
     print(f"\nEvaluating {len(df)} samples...")

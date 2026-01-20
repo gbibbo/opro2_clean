@@ -1,0 +1,26 @@
+#!/bin/bash
+#SBATCH --job-name=pull_container
+#SBATCH --partition=debug
+#SBATCH --time=02:00:00
+#SBATCH --mem=16G
+#SBATCH --cpus-per-task=4
+#SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro2_clean/slurm/pull_container_%j.out
+#SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro2_clean/slurm/pull_container_%j.err
+
+set -e
+
+cd /mnt/fast/nobackup/users/gb0048/opro2
+
+echo "Pulling PyTorch container (smaller, from Docker Hub)..."
+echo "Target: pytorch_2.1_cuda12.sif"
+
+# Set temp directory with space
+export APPTAINER_TMPDIR=/mnt/fast/nobackup/users/gb0048/.tmp
+export APPTAINER_CACHEDIR=/mnt/fast/nobackup/users/gb0048/.cache/apptainer
+mkdir -p $APPTAINER_TMPDIR $APPTAINER_CACHEDIR
+
+# Using smaller PyTorch container (~5GB vs ~15GB NGC)
+apptainer pull pytorch_2.1_cuda12.sif docker://pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
+
+echo "Done! Container saved to: /mnt/fast/nobackup/users/gb0048/opro2/pytorch_2.1_cuda12.sif"
+ls -lh pytorch_2.1_cuda12.sif

@@ -1,0 +1,135 @@
+{
+  "figure_id": "Fig_01",
+  "title": "Degradation Bank and Experimental Design",
+  "date_generated": "2026-01-06T18:12:51.165315",
+  "examples": {
+    "duration": {
+      "neutral": {
+        "audio_path": "/mnt/fast/nobackup/users/gb0048/opro2_clean/data/processed/variants_validated_1000/audio/test/esc50_1-58923-A-27_0368_1000ms_dur1000ms.wav",
+        "variant_id": "esc50_1-58923-A-27_0368_1000ms_dur1000ms",
+        "clip_id": "esc50_1-58923-A-27_0368_1000ms",
+        "ground_truth": "NONSPEECH",
+        "condition": "dur_1000ms",
+        "axis": "duration",
+        "level": "neutral",
+        "predictions": {
+          "baseline": "NONSPEECH",
+          "base_opro": "NONSPEECH",
+          "lora": "NONSPEECH",
+          "lora_opro": "NONSPEECH"
+        }
+      },
+      "extreme": {
+        "audio_path": "/mnt/fast/nobackup/users/gb0048/opro2_clean/data/processed/variants_validated_1000/audio/test/voxconverse_kckqn_0291_1000ms_dur20ms.wav",
+        "variant_id": "voxconverse_kckqn_0291_1000ms_dur20ms",
+        "clip_id": "voxconverse_kckqn_0291_1000ms",
+        "ground_truth": "SPEECH",
+        "condition": "dur_20ms",
+        "axis": "duration",
+        "level": "extreme",
+        "predictions": {
+          "baseline": "NONSPEECH",
+          "base_opro": "SPEECH",
+          "lora": "SPEECH",
+          "lora_opro": "SPEECH"
+        }
+      }
+    },
+    "snr": {
+      "neutral": {
+        "audio_path": "/mnt/fast/nobackup/users/gb0048/opro2_clean/data/processed/variants_validated_1000/audio/test/esc50_3-141559-A-45_0482_1000ms_snr+20dB.wav",
+        "variant_id": "esc50_3-141559-A-45_0482_1000ms_snr+20dB",
+        "clip_id": "esc50_3-141559-A-45_0482_1000ms",
+        "ground_truth": "NONSPEECH",
+        "condition": "snr_20dB",
+        "axis": "snr",
+        "level": "neutral",
+        "predictions": {
+          "baseline": "NONSPEECH",
+          "base_opro": "NONSPEECH",
+          "lora": "NONSPEECH",
+          "lora_opro": "NONSPEECH"
+        }
+      },
+      "extreme": {
+        "audio_path": "/mnt/fast/nobackup/users/gb0048/opro2_clean/data/processed/variants_validated_1000/audio/test/voxconverse_czlvt_0447_1000ms_snr-10dB.wav",
+        "variant_id": "voxconverse_czlvt_0447_1000ms_snr-10dB",
+        "clip_id": "voxconverse_czlvt_0447_1000ms",
+        "ground_truth": "SPEECH",
+        "condition": "snr_-10dB",
+        "axis": "snr",
+        "level": "extreme",
+        "predictions": {
+          "baseline": "NONSPEECH",
+          "base_opro": "SPEECH",
+          "lora": "SPEECH",
+          "lora_opro": "SPEECH"
+        }
+      }
+    },
+    "reverb": {
+      "neutral": {
+        "audio_path": "/mnt/fast/nobackup/users/gb0048/opro2_clean/data/processed/variants_validated_1000/audio/test/esc50_4-183487-A-1_0117_1000ms_reverbnone.wav",
+        "variant_id": "esc50_4-183487-A-1_0117_1000ms_reverbnone",
+        "clip_id": "esc50_4-183487-A-1_0117_1000ms",
+        "ground_truth": "NONSPEECH",
+        "condition": "reverb_none",
+        "axis": "reverb",
+        "level": "neutral",
+        "predictions": {
+          "baseline": "NONSPEECH",
+          "base_opro": "NONSPEECH",
+          "lora": "NONSPEECH",
+          "lora_opro": "NONSPEECH"
+        }
+      },
+      "extreme": {
+        "audio_path": "/mnt/fast/nobackup/users/gb0048/opro2_clean/data/processed/variants_validated_1000/audio/test/voxconverse_xvllq_0258_1000ms_reverb2.5s.wav",
+        "variant_id": "voxconverse_xvllq_0258_1000ms_reverb2.5s",
+        "clip_id": "voxconverse_xvllq_0258_1000ms",
+        "ground_truth": "SPEECH",
+        "condition": "reverb_2.5s",
+        "axis": "reverb",
+        "level": "extreme",
+        "predictions": {
+          "baseline": "NONSPEECH",
+          "base_opro": "SPEECH",
+          "lora": "SPEECH",
+          "lora_opro": "SPEECH"
+        }
+      }
+    },
+    "filter": {
+      "neutral": {
+        "audio_path": "/mnt/fast/nobackup/users/gb0048/opro2_clean/data/processed/variants_validated_1000/audio/test/esc50_3-197408-C-8_0400_1000ms_filternone.wav",
+        "variant_id": "esc50_3-197408-C-8_0400_1000ms_filternone",
+        "clip_id": "esc50_3-197408-C-8_0400_1000ms",
+        "ground_truth": "NONSPEECH",
+        "condition": "filter_none",
+        "axis": "filter",
+        "level": "neutral",
+        "predictions": {
+          "baseline": "NONSPEECH",
+          "base_opro": "NONSPEECH",
+          "lora": "NONSPEECH",
+          "lora_opro": "NONSPEECH"
+        }
+      },
+      "extreme": {
+        "audio_path": "/mnt/fast/nobackup/users/gb0048/opro2_clean/data/processed/variants_validated_1000/audio/test/voxconverse_tiams_0443_1000ms_filterbandpass.wav",
+        "variant_id": "voxconverse_tiams_0443_1000ms_filterbandpass",
+        "clip_id": "voxconverse_tiams_0443_1000ms",
+        "ground_truth": "SPEECH",
+        "condition": "filter_bandpass",
+        "axis": "filter",
+        "level": "extreme",
+        "predictions": {
+          "baseline": "NONSPEECH",
+          "base_opro": "SPEECH",
+          "lora": "SPEECH",
+          "lora_opro": "SPEECH"
+        }
+      }
+    }
+  }
+}

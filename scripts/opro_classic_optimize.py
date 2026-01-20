@@ -63,6 +63,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.qsm.models.qwen_audio import Qwen2AudioClassifier
 from src.qsm.utils.normalize import normalize_to_binary, llm_fallback_interpret
 
+# Qwen3-Omni (requires transformers from GitHub)
+try:
+    from src.qsm.models.qwen3_omni import Qwen3OmniClassifier
+    QWEN3_AVAILABLE = True
+except ImportError:
+    QWEN3_AVAILABLE = False
+
 # ============================================================================
 # Data Classes
 # ============================================================================
@@ -659,27 +666,62 @@ Generate the prompts now:"""
 # ============================================================================
 
 
-def build_evaluator_from_args(args) -> Qwen2AudioClassifier:
-    """Build evaluator model from command-line arguments."""
-    print(f"\nLoading evaluator model: {args.evaluator_model_name}...")
-    print(f"  Device: {args.evaluator_device}")
-    print("  4-bit quantization: True")
+def build_evaluator_from_args(args):
+    """Build evaluator model from command-line arguments.
 
-    model = Qwen2AudioClassifier(
-        model_name=args.evaluator_model_name,
-        device=args.evaluator_device,
-        load_in_4bit=True,
-    )
+    Returns either Qwen2AudioClassifier or Qwen3OmniClassifier based on --model_type.
+    """
+    model_type = getattr(args, "model_type", "qwen2")
 
-    if not args.no_lora and args.checkpoint is not None:
-        print(f"  Loading LoRA checkpoint: {args.checkpoint}")
-        from peft import PeftModel
+    if model_type == "qwen3_omni":
+        # Qwen3-Omni model
+        if not QWEN3_AVAILABLE:
+            raise RuntimeError(
+                "Qwen3-Omni not available. Install transformers from GitHub:\n"
+                "pip install git+https://github.com/huggingface/transformers.git"
+            )
 
-        model.model = PeftModel.from_pretrained(model.model, args.checkpoint)
-        model.model.eval()
-        print("  LoRA checkpoint loaded!")
+        # Use default model name if not overridden
+        model_name = args.evaluator_model_name
+        if model_name == "Qwen/Qwen2-Audio-7B-Instruct":
+            model_name = "Qwen/Qwen3-Omni-30B-A3B-Instruct"
 
-    return model
+        print(f"\nLoading Qwen3-Omni model: {model_name}...")
+        print(f"  Device: {args.evaluator_device}")
+        print("  NOTE: Qwen3-Omni does not support LoRA or 4-bit quantization")
+
+        model = Qwen3OmniClassifier(
+            model_name=model_name,
+            device=args.evaluator_device,
+        )
+
+        # Warn if LoRA was requested
+        if not args.no_lora and args.checkpoint is not None:
+            print("  WARNING: LoRA not supported for Qwen3-Omni, ignoring checkpoint")
+
+        return model
+
+    else:
+        # Qwen2-Audio model (default)
+        print(f"\nLoading evaluator model: {args.evaluator_model_name}...")
+        print(f"  Device: {args.evaluator_device}")
+        print("  4-bit quantization: True")
+
+        model = Qwen2AudioClassifier(
+            model_name=args.evaluator_model_name,
+            device=args.evaluator_device,
+            load_in_4bit=True,
+        )
+
+        if not args.no_lora and args.checkpoint is not None:
+            print(f"  Loading LoRA checkpoint: {args.checkpoint}")
+            from peft import PeftModel
+
+            model.model = PeftModel.from_pretrained(model.model, args.checkpoint)
+            model.model.eval()
+            print("  LoRA checkpoint loaded!")
+
+        return model
 
 
 def make_evaluator_fn(args, evaluator_model):
@@ -1109,6 +1151,13 @@ def main():
         type=str,
         default=None,
         help="Optional LoRA checkpoint (same as in evaluate_with_generation.py).",
+    )
+    parser.add_argument(
+        "--model_type",
+        type=str,
+        default="qwen2",
+        choices=["qwen2", "qwen3_omni"],
+        help="Model type: qwen2 (Qwen2-Audio-7B) or qwen3_omni (Qwen3-Omni-30B).",
     )
 
     # OPRO / LLM optimizer
