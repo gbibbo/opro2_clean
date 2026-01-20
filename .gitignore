@@ -209,3 +209,6 @@ nul
 
 # NOTE: legacy/ folder is tracked and should NOT be ignored
 # It contains archived code that may be useful for reference
+
+# Backup folder (obsolete/temporary scripts moved here for cleanup)
+backup/
