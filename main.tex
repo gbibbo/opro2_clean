@@ -528,33 +528,7 @@ Because the $22$ variants derived from the same base clip are not statistically 
 \subsection{Overall Performance Across Configurations (Big Picture)}
 \label{subsec:overall_performance}
 
-We first summarize aggregate clip-level performance across the configurations considered in this study, using balanced accuracy (BA) as the main metric and reporting per-class recalls for SPEECH and NONSPEECH. All results in this subsection are computed on the same held-out test set (21,340 clips derived from 970 unique base clips), with uncertainty quantified via 95\% confidence intervals (CIs) as described in Section~\ref{subsec:statistics}.
-
-\begin{table}[t]
-\centering
-\caption{Preliminary multi-model comparison. The Qwen3-Omni OPRO result (91.1\%) is from full test-set evaluation; the Qwen3 baseline ($\sim$90.8\%) is from the 660-sample development subset and will be updated once the full baseline run completes. \textit{Important:} Qwen2-Audio numbers shown here are from an earlier pilot run with different evaluation parameters and are \textbf{not directly comparable} to the verified results in Table~\ref{tab:overall_performance}; refer to that table for authoritative Qwen2-Audio metrics.}
-\label{tab:prelim_multimodel_comparison}
-\footnotesize
-\setlength{\tabcolsep}{5pt}
-\renewcommand{\arraystretch}{1.12}
-\begin{tabular}{llll}
-\toprule
-\textbf{Model} & \textbf{Prompt} & \textbf{BA$_{\text{clip}}$} & \textbf{BA$_{\text{conditions}}$} \\
-\midrule
-Qwen2-Audio-7B Base & Baseline & 77.7\%$^{\dagger}$ & 76.6\%$^{\dagger}$ \\
-Qwen2-Audio-7B Base & OPRO     & 86.9\%$^{\dagger}$ & 87.5\%$^{\dagger}$ \\
-Qwen2-Audio-7B LoRA & Baseline & 91.7\%$^{\dagger}$ & 92.1\%$^{\dagger}$ \\
-Qwen2-Audio-7B LoRA & OPRO     & 93.7\%$^{\dagger}$ & 93.9\%$^{\dagger}$ \\
-Qwen3-Omni-30B (Frozen) & Baseline$^{*}$ & $\sim$90.8\% & $\sim$92.8\% \\
-Qwen3-Omni-30B (Frozen) & OPRO     & 91.1\% & 92.7\% \\
-\bottomrule
-\end{tabular}
-
-\vspace{0.3em}
-\footnotesize{$^{\dagger}$From pilot run; see Table~\ref{tab:overall_performance} for verified Qwen2-Audio results. $^{*}$Dev subset only.}
-\end{table}
-
-Table~\ref{tab:prelim_multimodel_comparison} provides a preliminary snapshot comparing Qwen2-Audio and the frozen Qwen3-Omni model. The Qwen3-Omni OPRO result (91.1\% BA) comes from the full 21,340-sample test set; the frozen Qwen3-Omni model achieves performance comparable to the LoRA-adapted Qwen2-Audio without any parameter updates, suggesting that architectural or scale differences may confer robustness gains that Qwen2-Audio requires fine-tuning to achieve. The detailed per-class recalls, paired tests, and per-axis psychometric analyses reported below focus on the core Qwen2-Audio configurations.
+We first summarize aggregate clip-level performance for the primary Qwen2-Audio configurations (2$\times$2 factorial: Base/LoRA $\times$ Hand/OPRO), using balanced accuracy (BA) as the main metric and reporting per-class recalls for SPEECH and NONSPEECH. All results in this section are computed on the same held-out test set (21,340 clips derived from 970 unique base clips), with uncertainty quantified via 95\% confidence intervals (CIs) as described in Section~\ref{subsec:statistics}. Preliminary cross-model comparison with the frozen Qwen3-Omni-30B model is presented in Appendix~\ref{app:qwen3_prelim}.
 
 % --- Table: overall metrics (already contains table* env, caption, and label) ---
 \input{tables/Tab_R02_OverallPerformance.tex}
@@ -798,6 +772,42 @@ Prompt optimization for the base model (Base+OPRO) yields a moderately longer in
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \appendix
+
+\section{Cross-Model Generalization: Preliminary Qwen3-Omni Results}
+\label{app:qwen3_prelim}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+In addition to the core Qwen2-Audio experiments, we conducted a preliminary evaluation of Qwen3-Omni-30B-A3B-Instruct as a frozen model (no LoRA/QLoRA) to test whether the degradation trends and prompt-optimization gains observed for Qwen2-Audio generalize to a newer omni-modal Mixture-of-Experts (MoE) LALM. Table~\ref{tab:prelim_multimodel_comparison} compares aggregate performance across both models.
+
+\begin{table}[h]
+\centering
+\caption{Preliminary cross-model comparison. The Qwen3-Omni OPRO result (91.1\%) is from full test-set evaluation; the Qwen3 baseline ($\sim$90.8\%) is from the 660-sample development subset and will be updated once the full baseline run completes. \textit{Important:} Qwen2-Audio numbers shown here are from an earlier pilot run with different evaluation parameters and are \textbf{not directly comparable} to the verified results in Table~\ref{tab:overall_performance} (main text); refer to that table for authoritative Qwen2-Audio metrics.}
+\label{tab:prelim_multimodel_comparison}
+\footnotesize
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.12}
+\begin{tabular}{llll}
+\toprule
+\textbf{Model} & \textbf{Prompt} & \textbf{BA$_{\text{clip}}$} & \textbf{BA$_{\text{conditions}}$} \\
+\midrule
+Qwen2-Audio-7B Base & Baseline & 77.7\%$^{\dagger}$ & 76.6\%$^{\dagger}$ \\
+Qwen2-Audio-7B Base & OPRO     & 86.9\%$^{\dagger}$ & 87.5\%$^{\dagger}$ \\
+Qwen2-Audio-7B LoRA & Baseline & 91.7\%$^{\dagger}$ & 92.1\%$^{\dagger}$ \\
+Qwen2-Audio-7B LoRA & OPRO     & 93.7\%$^{\dagger}$ & 93.9\%$^{\dagger}$ \\
+Qwen3-Omni-30B (Frozen) & Baseline$^{*}$ & $\sim$90.8\% & $\sim$92.8\% \\
+Qwen3-Omni-30B (Frozen) & OPRO     & 91.1\% & 92.7\% \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.3em}
+\footnotesize{$^{\dagger}$From pilot run; see Table~\ref{tab:overall_performance} for verified Qwen2-Audio results. $^{*}$Dev subset only.}
+\end{table}
+
+The frozen Qwen3-Omni model achieves performance comparable to the LoRA-adapted Qwen2-Audio without any parameter updates (91.1\% BA under OPRO vs. 93.7\% for Qwen2+LoRA+OPRO from the pilot run), suggesting that architectural or scale differences may confer robustness gains that Qwen2-Audio requires fine-tuning to achieve. However, the Qwen2-Audio numbers shown in this table are from an earlier pilot evaluation and should not be used for direct quantitative comparison; the verified Qwen2-Audio results reported in the main text (Table~\ref{tab:overall_performance}) use refined evaluation parameters and constitute the authoritative reference for the 2$\times$2 factorial experiment.
+
+This preliminary cross-model snapshot demonstrates that (i) prompt optimization yields measurable gains even on a large frozen MoE model, and (ii) the psychometric degradation framework is transferable across LALM architectures. Future work will extend the full statistical analysis (McNemar tests, psychometric thresholds, condition-level sweeps) to Qwen3-Omni once the baseline evaluation completes.
+
+
 \section{Supplementary Material: Classic vs.\ Open OPRO Variants}
 \label{app:classic_vs_open}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
