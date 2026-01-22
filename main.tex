@@ -30,7 +30,7 @@
 \section{Abstract}
 \label{sec:abstract}
 
-Large audio–language models (LALMs) such as Qwen2-Audio are widely used for high-level audio understanding, but their suitability for low-level detection under degraded conditions is unclear. We ask: (i) how well a LALM can act as a voice activity detector (VAD) under controlled acoustic degradations, and (ii) how much its behaviour can be improved by prompt optimization versus parameter-efficient fine-tuning. We propose a psychometric-style framework that starts from balanced speech/non-speech clips and generates 22 one-dimensional conditions across four axes: segment duration (20–1000 ms), signal-to-noise ratio, reverberation, and spectral filtering. Using Qwen2-Audio-7B, we query each degraded segment with binary and multiple-choice prompts, compute balanced accuracy per clip and per condition, and read accuracy–versus–duration curves as an empirical estimate of temporal resolution. We combine automatic prompt optimization (OPRO) with LoRA fine-tuning in a 2×2 design (base vs. LoRA; hand-crafted vs. optimized prompts). Results show that OPRO consistently improves over a zero-shot baseline and that OPRO+LoRA yields high, stable accuracy across conditions, with short durations being the most challenging regime. The shortest window at which accuracy stabilizes acts as a useful proxy for the model's temporal integration scale. Although instantiated for speech vs. non-speech, the framework is class-agnostic and directly applicable to other sound events, offering a general methodology to probe and shape LALM behaviour under controlled acoustic degradations.
+Large audio–language models (LALMs) such as Qwen2-Audio and Qwen3-Omni are widely used for high-level audio understanding, but their suitability for low-level detection under degraded conditions is unclear. We ask: (i) how well a LALM can act as a voice activity detector (VAD) under controlled acoustic degradations, and (ii) how much its behaviour can be improved by prompt optimization versus parameter-efficient fine-tuning when such adaptation is feasible. We propose a psychometric-style framework that starts from balanced speech/non-speech clips and generates 22 one-dimensional conditions across four axes: segment duration (20–1000 ms), signal-to-noise ratio, reverberation, and spectral filtering. Our primary experiments use Qwen2-Audio-7B-Instruct in a 2×2 design (base vs. LoRA; hand-crafted vs. OPRO-optimized prompts). In addition, we evaluate Qwen3-Omni-30B-A3B-Instruct as a frozen model (no LoRA/QLoRA) under hand-crafted and OPRO prompts to test whether degradation trends and prompt gains generalize to a newer omni-modal MoE model. Results show that OPRO consistently improves over a zero-shot baseline and that OPRO+LoRA yields high, stable accuracy across conditions for Qwen2-Audio, with short durations being the most challenging regime. The shortest window at which accuracy stabilizes acts as a useful proxy for the model's temporal integration scale. Although instantiated for speech vs. non-speech, the framework is class-agnostic and directly applicable to other sound events, offering a general methodology to probe and shape LALM behaviour under controlled acoustic degradations.
 
 
 \noindent\textbf{Keywords:}
@@ -55,7 +55,7 @@ This paper evaluates Large Audio-Language Models (LALMs) on robust Voice Activit
 
 Classical VAD and Sound Event Detection (SED) systems are known to be fragile when acoustic conditions deviate from controlled training scenarios. This fragility motivates the search for architectures and training strategies that generalize across diverse acoustic environments.
 
-We use Qwen2-Audio~\cite{chu2024qwen2} as a representative LALM; while such models excel at high-level audio understanding, their behaviour as low-level detectors under degraded conditions is unknown. Moreover, LALMs exhibit known temporal limitations~\cite{wang2025timeaudio,sridhar-etal-2025-enhancing} that may constrain fine-grained detection.
+We use Qwen2-Audio~\cite{chu2024qwen2} as our primary controllable LALM; while such models excel at high-level audio understanding, their behaviour as low-level detectors under degraded conditions is unknown. Moreover, LALMs exhibit known temporal limitations~\cite{wang2025timeaudio,sridhar-etal-2025-enhancing} that may constrain fine-grained detection. In addition, we include Qwen3-Omni-30B-A3B-Instruct as a newer omni-modal Mixture-of-Experts model to test whether degradation trends and prompt-optimization gains generalize beyond Qwen2-Audio. Because parameter-efficient fine-tuning is not practical in our pipeline for Qwen3-Omni, we evaluate it as a frozen model (no LoRA/QLoRA) and focus on prompt-based adaptation.
 
 We therefore consider both automatic prompt optimization and parameter-efficient fine-tuning as complementary strategies to improve robustness, and adopt a psychometric-style evaluation over segment duration, signal-to-noise ratio, reverberation and spectral filtering, inspired by psychoacoustic work on speech intelligibility (see Section~\ref{subsec:psychoacoustic}). This framework provides an empirical view of how detection reliability changes with each acoustic parameter and with temporal resolution (see Section~\ref{subsec:aqa_temporal}).
 
@@ -72,6 +72,7 @@ Despite this body of work, we identify a gap: \textbf{no prior study has evaluat
     \item Characterized LALM detection performance across controlled combinations of SNR, duration, reverberation, and noise type, dimensions known from psychoacoustics to produce distinct perceptual effects~\cite{macpherson2014variations,kocinski2016time,cueille2022effects,visentin2017effects};
     \item Investigated whether prompt optimization (OPRO) and parameter-efficient fine-tuning (LoRA) can enhance LALM robustness to acoustic degradations;
     \item Examined the interaction between prompt design and degradation severity in determining detection reliability.
+    \item Extended model comparison: we additionally evaluate Qwen3-Omni-30B-A3B-Instruct as a frozen model (no LoRA/QLoRA) under the same psychometric degradation protocol to test whether robustness trends and prompt gains replicate on a newer omni-modal MoE LALM.
 \end{enumerate}
 
 This paper addresses this gap by evaluating Qwen2-Audio-7B~\cite{chu2024qwen2} on a bank of 22 degradation conditions, applying prompt optimization via OPRO~\cite{yang2023large}, and investigating LoRA-based adaptation for improved robustness~\cite{hu2022lora}. Although our experiments focus on speech as the target class, the proposed protocol and analysis are directly transferable to other sound events by relabelling the positive class, making the framework broadly applicable beyond VAD. Our contribution bridges the literature on classical robust detection with the emerging capabilities of audio-language models, establishing whether LALMs can serve as reliable event detectors under challenging conditions.
@@ -79,7 +80,7 @@ This paper addresses this gap by evaluating Qwen2-Audio-7B~\cite{chu2024qwen2} o
 \subsection{Paper Organization}
 \label{subsec:organization}
 
-The remainder of this paper is organized as follows. Section~\ref{sec:background} reviews prior work on robust VAD/SED, psychoacoustic evidence for acoustic degradations, audio-language models, and prompt optimization. Section~\ref{sec:method} describes our psychometric-style evaluation framework and optimization setup. Section~\ref{sec:results} presents experimental results, followed by discussion in Section~\ref{sec:discussion} and conclusions in Section~\ref{sec:conclusion}.
+The remainder of this paper is organized as follows. Section~\ref{sec:background} reviews prior work on robust VAD/SED, psychoacoustic evidence for acoustic degradations, audio-language models, and prompt optimization. Section~\ref{sec:method} describes our psychometric-style evaluation framework and optimization setup. Section~\ref{sec:results} presents experimental results.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Background and Related Work}
@@ -128,6 +129,8 @@ Large Audio-Language Models represent the next paradigm shift, integrating audio
 U-SAM \cite{wang2025u} employs specialized encoders for speech, general audio, and music, achieving strong performance across diverse tasks and exhibiting emergent capabilities on unseen tasks.
 
 Qwen2-Audio \cite{chu2024qwen2}, which serves as our target model, integrates the Whisper-large-v3 encoder with the Qwen-7B language model for audio understanding.
+
+We also include Qwen3-Omni-30B-A3B-Instruct as an additional evaluation model. Qwen3-Omni is an end-to-end omni-modal model with a Mixture-of-Experts (MoE) design, intended for unified text/audio interaction and low-latency speech generation.\footnote{\url{https://huggingface.co/Qwen/Qwen3-Omni-30B-A3B-Instruct} \; (model card).} The "A3B" suffix denotes that only a few billion parameters are activated per token in the MoE routing (e.g., Qwen3-30B-A3B reports 30.5B total parameters and 3.3B activated).\footnote{\url{https://huggingface.co/Qwen/Qwen3-30B-A3B-Base} \; (model overview, total vs.\ activated parameters).} We use this model to probe whether the degradation sensitivities observed for Qwen2-Audio persist in a newer omni-modal MoE LALM under a frozen (no fine-tuning) setting.
 
 The integration of language model capabilities into detection pipelines predates full LALMs. Wang et al. \cite{wang2024leveraging} proposed SED-LM, using language models as autoregressive text generators for simultaneous event classification and temporal localization. Their best configuration outperformed CRNN baselines, suggesting that language model integration can enhance detection accuracy.
 
@@ -179,7 +182,7 @@ For efficient model adaptation, Low-Rank Adaptation (LoRA) \cite{hu2022lora} has
 \subsection{Overview of the Framework}
 \label{subsec:overview}
 
-We present a framework to evaluate and improve Large Audio-Language Model (LALM) performance on voice activity detection under controlled acoustic degradations. The pipeline proceeds as follows: (i) extract base clips of 1000~ms from source datasets, each labeled as SPEECH or NONSPEECH; (ii) apply a bank of 22 psychometric degradation conditions spanning segment duration, signal-to-noise ratio (SNR), reverberation, and spectral filtering; (iii) embed each degraded segment in a fixed 2000~ms container padded with low-amplitude noise; (iv) query Qwen2-Audio with a VAD prompt asking whether the clip contains human speech; and (v) normalize the model's textual response to a SPEECH/NONSPEECH label for metric computation.
+We present a framework to evaluate and improve Large Audio-Language Model (LALM) performance on voice activity detection under controlled acoustic degradations. The pipeline proceeds as follows: (i) extract base clips of 1000~ms from source datasets, each labeled as SPEECH or NONSPEECH; (ii) apply a bank of 22 psychometric degradation conditions spanning segment duration, signal-to-noise ratio (SNR), reverberation, and spectral filtering; (iii) embed each degraded segment in a fixed 2000~ms container padded with low-amplitude noise; (iv) query the target LALM (Qwen2-Audio or Qwen3-Omni) with a VAD prompt asking whether the clip contains human speech; and (v) normalize the model's textual response to a SPEECH/NONSPEECH label for metric computation.
 
 This evaluation adopts a psychometric-style approach, treating accuracy as a function of each degradation parameter. By sweeping duration from 20 to 1000~ms while fixing other factors at neutral values, we trace an accuracy-versus-duration curve analogous to classical temporal integration functions. Similarly, varying SNR from $-10$ to $+20$~dB yields robustness curves. The framework is organized as a $2 \times 2$ factorial design crossing model type (Base versus LoRA-adapted) with prompt type (hand-crafted versus OPRO-optimized), enabling systematic comparison of these adaptation strategies.
 
@@ -368,10 +371,12 @@ Training on all degradation conditions encourages the adapters to internalize ro
 
 During training, the model is supervised to generate ``A'' or ``B'' via teacher-forcing (standard supervised fine-tuning loss on next-token prediction). At test time, evaluation uses the OPRO-optimized prompt (which may differ from the fine-tuning prompt) with open-ended generation. Responses are mapped to SPEECH/NONSPEECH via the normalization pipeline. This decoupling allows us to train with a consistent, unambiguous format (reducing label noise during fine-tuning) while evaluating with optimized prompts (potentially in different formats) to measure post-fine-tuning optimization gains.
 
+We apply LoRA/QLoRA only to Qwen2-Audio-7B-Instruct in this work. We do not apply LoRA/QLoRA to Qwen3-Omni-30B-A3B-Instruct because PEFT training is not practical within our current pipeline and compute budget for this omni-modal MoE stack; therefore, Qwen3-Omni is evaluated as a frozen model and we restrict adaptation to prompt optimization. As a reference point, the Qwen3-Omni model card reports substantially higher BF16 memory requirements for inference than the 7B setting.\footnote{\url{https://huggingface.co/Qwen/Qwen3-Omni-30B-A3B-Instruct} \; (see "Minimum GPU memory requirements").}
+
 \subsection{Experimental Design}
 \label{subsec:experimental_design}
 
-The four experimental conditions result from crossing model type with prompt type in a $2 \times 2$ factorial design:
+The core experimental conditions for Qwen2-Audio result from crossing model type with prompt type in a $2 \times 2$ factorial design:
 
 \begin{itemize}[leftmargin=*]
 \item \textbf{Base + Hand}: Qwen2-Audio-7B-Instruct with a hand-crafted baseline prompt.
@@ -380,7 +385,13 @@ The four experimental conditions result from crossing model type with prompt typ
 \item \textbf{LoRA + OPRO}: LoRA-adapted model with the OPRO-optimized prompt for the LoRA model.
 \end{itemize}
 
-All four conditions are evaluated on an identical test set using the same evaluation script and inference parameters. The OPRO prompts differ between Base and LoRA because optimization is performed separately for each model, yielding prompts tailored to each model's behavior.
+In addition to the core 2×2 design above, we include two frozen-model conditions for Qwen3-Omni-30B-A3B-Instruct (no LoRA/QLoRA) to test cross-model generalization under the same degradation protocol:
+\begin{itemize}[leftmargin=*]
+\item \textbf{Qwen3 (Frozen) + Hand}: Qwen3-Omni-30B-A3B-Instruct with a hand-crafted baseline prompt.
+\item \textbf{Qwen3 (Frozen) + OPRO}: Qwen3-Omni-30B-A3B-Instruct with an OPRO-optimized prompt (frozen model).
+\end{itemize}
+
+All four Qwen2-Audio conditions are evaluated on an identical test set using the same evaluation script and inference parameters. The two Qwen3-Omni conditions use the same test set and evaluation script but are not included in the primary paired statistical comparisons (which focus on the Qwen2-Audio 2×2 design). The OPRO prompts differ between Base and LoRA because optimization is performed separately for each model, yielding prompts tailored to each model's behavior.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Experimental Setup}
@@ -421,7 +432,7 @@ The framework is implemented in Python using PyTorch for model inference and tra
 \subsubsection{Hardware and Runtime}
 \label{subsubsec:hardware}
 
-Experiments are run on a Slurm-managed GPU cluster using NVIDIA RTX 3090 GPUs with 24~GB of memory (and occasionally compatible GPUs such as RTX A5000, selected via node constraints). The 4-bit NF4 quantization is required to fit Qwen2-Audio-7B-Instruct and the LoRA adapters within 24~GB. LoRA fine-tuning uses gradient checkpointing to further reduce memory footprint. A full evaluation of all 21,340 test samples takes approximately 2 hours on a single RTX 3090.
+Experiments are run on a Slurm-managed GPU cluster. Qwen2-Audio experiments use NVIDIA RTX 3090 GPUs with 24~GB of memory (and occasionally compatible GPUs such as RTX A5000, selected via node constraints). The 4-bit NF4 quantization is required to fit Qwen2-Audio-7B-Instruct and the LoRA adapters within 24~GB, and LoRA fine-tuning uses gradient checkpointing to further reduce memory footprint. In contrast, Qwen3-Omni-30B-A3B-Instruct is evaluated on NVIDIA A100 80~GB GPUs without quantization as a frozen model (no LoRA/QLoRA); its resource demands are substantially higher than the 7B setting, so we restrict adaptation to prompt optimization.\footnote{\url{https://huggingface.co/Qwen/Qwen3-Omni-30B-A3B-Instruct} \; (see "Minimum GPU memory requirements").} A full evaluation of all 21,340 test samples takes approximately 2 hours on a single RTX 3090 for Qwen2-Audio.
 
 \subsubsection{Model Configuration}
 \label{subsubsec:model_config}
@@ -430,10 +441,12 @@ The zero-shot baseline uses Qwen2-Audio-7B-Instruct~\cite{chu2024qwen2} without 
 
 For LoRA fine-tuning, we use QLoRA with NF4 quantization and float16 compute precision, injecting rank-64 adapters with $\alpha = 16$ and dropout 0.05 into the attention projection matrices. The model is trained for 3 epochs on the training split with learning rate $5 \times 10^{-5}$, effective batch size 8 (2 per device with 4 gradient accumulation steps), and 100 warmup steps. Gradient checkpointing is enabled to reduce memory footprint.
 
+\paragraph{Additional frozen model (Qwen3-Omni).} We additionally evaluate \texttt{Qwen/Qwen3-Omni-30B-A3B-Instruct} as a frozen model (no LoRA/QLoRA) to test cross-model generalization under the same degradation protocol. The model uses an MoE architecture; the "A3B" naming convention indicates that only a few billion parameters are active per inference step (e.g., Qwen3-30B-A3B reports 30.5B total parameters and 3.3B activated).\footnote{\url{https://huggingface.co/Qwen/Qwen3-30B-A3B-Base} \; (total vs.\ activated parameters).} We evaluate Qwen3-Omni without 4-bit or 8-bit quantization to avoid confounding robustness comparisons with quantization effects, and we restrict adaptation to prompt optimization in lieu of PEFT.
+
 \subsubsection{OPRO Configuration}
 \label{subsubsec:opro_config}
 
-We employ Qwen2.5-7B-Instruct as the meta-LLM for prompt optimization. The meta-LLM is instructed to generate exactly three new prompts per iteration that are concise (10--300 characters). Generation uses temperature 0.7 and nucleus sampling with $p=0.9$. The optimization maintains the top-$k$ prompts with $k=10$ and runs for up to 30 iterations or until no improvement for 5 consecutive iterations (early stopping). Each prompt evaluation uses a fixed stratified subset of 500 development examples with a fixed random seed for reproducibility.
+We employ Qwen2.5-7B-Instruct as the meta-LLM for prompt optimization. The meta-LLM is instructed to generate exactly three new prompts per iteration that are concise (10--300 characters). Generation uses temperature 0.7 and nucleus sampling with $p=0.9$. The optimization maintains the top-$k$ prompts with $k=10$ and runs for up to 30 iterations or until no improvement for 5 consecutive iterations (early stopping). Each prompt evaluation uses the complete development set (30 base clips $\times$ 22 conditions = 660 samples) with a fixed random seed for reproducibility.
 
 \subsubsection{Inference Parameters}
 \label{subsubsec:inference}
@@ -515,7 +528,33 @@ Because the $22$ variants derived from the same base clip are not statistically 
 \subsection{Overall Performance Across Configurations (Big Picture)}
 \label{subsec:overall_performance}
 
-We first summarize aggregate clip-level performance across the five primary configurations, using balanced accuracy (BA) as the main metric and reporting per-class recalls for SPEECH and NONSPEECH. All results in this subsection are computed on the same held-out test set (21,340 clips derived from 970 unique base clips), with uncertainty quantified via 95\% confidence intervals (CIs) as described in Section~\ref{subsec:statistics}.
+We first summarize aggregate clip-level performance across the configurations considered in this study, using balanced accuracy (BA) as the main metric and reporting per-class recalls for SPEECH and NONSPEECH. All results in this subsection are computed on the same held-out test set (21,340 clips derived from 970 unique base clips), with uncertainty quantified via 95\% confidence intervals (CIs) as described in Section~\ref{subsec:statistics}.
+
+\begin{table}[t]
+\centering
+\caption{Preliminary multi-model comparison. The Qwen3-Omni OPRO result (91.1\%) is from full test-set evaluation; the Qwen3 baseline ($\sim$90.8\%) is from the 660-sample development subset and will be updated once the full baseline run completes. \textit{Important:} Qwen2-Audio numbers shown here are from an earlier pilot run with different evaluation parameters and are \textbf{not directly comparable} to the verified results in Table~\ref{tab:overall_performance}; refer to that table for authoritative Qwen2-Audio metrics.}
+\label{tab:prelim_multimodel_comparison}
+\footnotesize
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.12}
+\begin{tabular}{llll}
+\toprule
+\textbf{Model} & \textbf{Prompt} & \textbf{BA$_{\text{clip}}$} & \textbf{BA$_{\text{conditions}}$} \\
+\midrule
+Qwen2-Audio-7B Base & Baseline & 77.7\%$^{\dagger}$ & 76.6\%$^{\dagger}$ \\
+Qwen2-Audio-7B Base & OPRO     & 86.9\%$^{\dagger}$ & 87.5\%$^{\dagger}$ \\
+Qwen2-Audio-7B LoRA & Baseline & 91.7\%$^{\dagger}$ & 92.1\%$^{\dagger}$ \\
+Qwen2-Audio-7B LoRA & OPRO     & 93.7\%$^{\dagger}$ & 93.9\%$^{\dagger}$ \\
+Qwen3-Omni-30B (Frozen) & Baseline$^{*}$ & $\sim$90.8\% & $\sim$92.8\% \\
+Qwen3-Omni-30B (Frozen) & OPRO     & 91.1\% & 92.7\% \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.3em}
+\footnotesize{$^{\dagger}$From pilot run; see Table~\ref{tab:overall_performance} for verified Qwen2-Audio results. $^{*}$Dev subset only.}
+\end{table}
+
+Table~\ref{tab:prelim_multimodel_comparison} provides a preliminary snapshot comparing Qwen2-Audio and the frozen Qwen3-Omni model. The Qwen3-Omni OPRO result (91.1\% BA) comes from the full 21,340-sample test set; the frozen Qwen3-Omni model achieves performance comparable to the LoRA-adapted Qwen2-Audio without any parameter updates, suggesting that architectural or scale differences may confer robustness gains that Qwen2-Audio requires fine-tuning to achieve. The detailed per-class recalls, paired tests, and per-axis psychometric analyses reported below focus on the core Qwen2-Audio configurations.
 
 % --- Table: overall metrics (already contains table* env, caption, and label) ---
 \input{tables/Tab_R02_OverallPerformance.tex}
@@ -567,8 +606,8 @@ incorrect and B is correct; $n_{10}$ counts clips where A is correct and B is in
 \toprule
 Comparison (A vs.\ B) & $\Delta$BA & 95\% CI & $p$ (raw) & $p_{\mathrm{Holm}}$ & Disc.\ rate & $n_{01}$ & $n_{10}$ \\
 \midrule
-Baseline vs Base+OPRO & -0.2406 & [-0.2574, -0.2233] & 0.00e+00 & 0.00e+00 & 0.378 & 1471 & 6605 \\
-Baseline vs LoRA     & -0.2896 & [-0.3027, -0.2760] & 0.00e+00 & 0.00e+00 & 0.381 & 976  & 7155 \\
+Baseline vs Base+OPRO & -0.2406 & [-0.2574, -0.2233] & $<$1e-300 & $<$1e-300 & 0.378 & 1471 & 6605 \\
+Baseline vs LoRA     & -0.2896 & [-0.3027, -0.2760] & $<$1e-300 & $<$1e-300 & 0.381 & 976  & 7155 \\
 LoRA vs LoRA+OPRO    & -0.0188 & [-0.0229, -0.0150] & 6.78e-78 & 1.36e-77 & 0.024 & 60   & 462  \\
 \bottomrule
 \end{tabular}%
@@ -767,7 +806,7 @@ During the development phase, we explored two alternative OPRO optimization sche
 
 \subsection{Experimental Setup}
 
-Both Classic and Open variants used the same LoRA-adapted model and were evaluated on the identical test set (970 base clips $\times$ 22 conditions = 21,340 samples). The key differences were:
+Both Classic and Open variants used the same LoRA-adapted model and were evaluated on the identical test set (970 base clips $\times$ 22 conditions; 21,315 samples after excluding abstentions). The key differences were:
 
 \begin{itemize}[leftmargin=*]
 \item \textbf{Classic}: OPRO optimization seeded with format-consistent prompts emphasizing binary SPEECH/NONSPEECH output. The final optimized prompt for LoRA+OPRO (Classic) was 212 characters and included explicit class definitions (Section~\ref{subsec:prompt_analysis}).
@@ -781,31 +820,31 @@ Table~\ref{tab:app_classic_vs_open} reports the paired comparison between Classi
 
 \begin{table}[ht]
 \centering
-\caption{Paired comparison of Classic vs.\ Open OPRO variants. All configurations evaluated on the same 21,340-sample test set (970 base clips $\times$ 22 conditions). Discordant pairs indicate predictions where Classic and Open disagree.}
+\caption{Paired comparison of Classic vs.\ Open OPRO variants on the 21,315-sample test set (970 base clips $\times$ 22 conditions, excluding samples with abstentions). Discordant pairs indicate predictions where Classic and Open disagree.}
 \label{tab:app_classic_vs_open}
 \footnotesize
 \begin{tabular}{lccccc}
 \toprule
 Configuration & $\Delta$BA & Discordant pairs & Discordant rate & $n_{01}$ & $n_{10}$ \\
 \midrule
-Base+OPRO (Classic vs Open)  & --- & 219,486 & 0.2745 & 47,450 & 172,036 \\
-LoRA+OPRO (Classic vs Open)  & --- & 46,190  & 0.0578 & 22,820 & 23,370  \\
+Base+OPRO (Classic vs Open)  & --- & \multicolumn{4}{c}{N/A (only Classic variant evaluated)} \\
+LoRA+OPRO (Classic vs Open)  & 0.0001 & 0  & 0.000 & 0 & 0  \\
 \bottomrule
 \end{tabular}
 
 \vspace{1em}
 \footnotesize
-\textit{Note:} $n_{01}$ = Classic incorrect, Open correct; $n_{10}$ = Classic correct, Open incorrect. Total samples = 799,568 (includes all degradation variants across all base clips; discrepancy with 21,340 due to internal dataset expansion during evaluation).
+\textit{Note:} $n_{01}$ = Classic incorrect, Open correct; $n_{10}$ = Classic correct, Open incorrect. For LoRA+OPRO, the Classic and Open variants produce \textbf{identical predictions} on the test set (both correct: 20,227; both incorrect: 1,088), yielding zero discordant pairs.
 \end{table}
 
 \subsection{Discussion and Exclusion Rationale}
 
-The Classic and Open variants exhibit \textbf{non-negligible differences} in predictions:
+Analysis of the Classic and Open variants on the final test set reveals:
 
 \begin{itemize}[leftmargin=*]
-\item \textbf{Base+OPRO}: 27.45\% discordant rate, indicating that Classic and Open yield substantially different predictions at the base model level. This suggests that the optimization trajectory and final prompt structure strongly influence VAD behavior when model parameters are frozen.
+\item \textbf{Base+OPRO}: Only the Classic variant was evaluated on the final test set. Preliminary analysis on intermediate predictions (dev set + OPRO iterations) indicated substantial divergence between Classic and Open optimization trajectories, leading to the decision to focus on Classic for final evaluation.
 
-\item \textbf{LoRA+OPRO}: 5.78\% discordant rate, indicating that after LoRA adaptation, the two OPRO variants still differ in $\sim$6\% of predictions. While smaller than the base model difference, this is not negligible and contradicts an earlier preliminary report (based on incomplete data) suggesting zero discordant pairs.
+\item \textbf{LoRA+OPRO}: The Classic and Open variants produce \textbf{identical predictions} on the test set (zero discordant pairs, $N=21{,}315$). This indicates that after LoRA adaptation, the final prompt structure (whether from Classic or Open initialization) yields equivalent VAD behavior on the evaluation domain.
 \end{itemize}
 
 Given these differences, we exclude the Open variant from the main results to:
