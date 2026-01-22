@@ -360,7 +360,7 @@ where $\mathrm{BA}_{\text{clip}}$ is the balanced accuracy computed globally ove
 We conduct OPRO optimization experiments with different seed configurations to evaluate prompt optimization under various initialization strategies: format-consistent seeds (all instructing binary label output), and diverse seeds mixing multiple formats (descriptive, binary, multiple-choice, with definitions, few-shot examples).
 
 \subsubsection{Parameter-Efficient Fine-Tuning (LoRA)}
-\label{subsubsec:lora}
+\label{subsubsec:lora_method}
 
 We apply Low-Rank Adaptation~\cite{hu2022lora} to the attention projection matrices ($\mathbf{W}_Q$, $\mathbf{W}_K$, $\mathbf{W}_V$, $\mathbf{W}_O$) of both the audio encoder and language model components. Unlike prompt optimization, which modifies inputs while keeping model weights frozen, LoRA adapts the model's internal representations by training low-rank decomposition matrices rather than full weight updates.
 
@@ -517,7 +517,7 @@ Uncertainty for thresholds is quantified using a cluster bootstrap with $B=10{,}
 \subsection{Evaluation Set and Summary Metrics}
 \label{subsec:results_evalset}
 
-Our evaluation protocol is based on a fixed test set of $970$ unique 4-second clips (``base clips''). Each base clip is deterministically expanded into $22$ evaluation variants spanning four psychometric degradation axes, yielding $21{,}340$ scored samples in total ($970 \times 22$). The $22$ variants comprise: (i) \textit{Duration} truncations at eight values (20--1000\,ms), (ii) \textit{SNR} at six levels ($-10$\,dB to $+20$\,dB), (iii) four \textit{Filter} settings (none, bandpass, highpass, lowpass), and (iv) four \textit{Reverberation} settings (one neutral ``none'' plus three discrete reverberation profiles). We refer to the $20$ non-neutral settings as ``degradation conditions''; two additional neutral references (filter\_none and reverb\_none) are retained for completeness and to anchor the per-axis curves.
+Our evaluation protocol is based on a fixed test set of $970$ unique 1000-ms clips (``base clips''). Each base clip is deterministically expanded into $22$ evaluation variants spanning four psychometric degradation axes, yielding $21{,}340$ scored samples in total ($970 \times 22$). The $22$ variants comprise: (i) \textit{Duration} conditions at eight values (20--1000\,ms), (ii) \textit{SNR} at six levels ($-10$\,dB to $+20$\,dB), (iii) four \textit{Filter} settings (none, bandpass, highpass, lowpass), and (iv) four \textit{Reverberation} settings (one neutral ``none'' plus three discrete reverberation profiles). We refer to the $20$ non-neutral settings as ``degradation conditions''; two additional neutral references (filter\_none and reverb\_none) are retained for completeness and to anchor the per-axis curves.
 
 The test set is perfectly class-balanced by construction. Across the full evaluation set, there are $10{,}670$ SPEECH and $10{,}670$ NONSPEECH samples (50.0\% / 50.0\%). This balance is preserved within each of the $22$ conditions: every condition contains $970$ samples with an exact split of $485$ SPEECH and $485$ NONSPEECH. This design ensures that changes in performance across conditions or configurations cannot be attributed to shifts in class prevalence, and it makes balanced accuracy a natural primary metric.
 
@@ -582,7 +582,7 @@ Comparison (A vs.\ B) & $\Delta$BA & 95\% CI & $p$ (raw) & $p_{\mathrm{Holm}}$ &
 \midrule
 Baseline vs Base+OPRO & -0.2406 & [-0.2574, -0.2233] & $<$1e-300 & $<$1e-300 & 0.378 & 1471 & 6605 \\
 Baseline vs LoRA     & -0.2896 & [-0.3027, -0.2760] & $<$1e-300 & $<$1e-300 & 0.381 & 976  & 7155 \\
-LoRA vs LoRA+OPRO    & -0.0188 & [-0.0229, -0.0150] & 6.78e-78 & 1.36e-77 & 0.024 & 60   & 462  \\
+LoRA vs LoRA+OPRO    & -0.0188 & [-0.0229, -0.0150] & 6.78e-78 & 6.78e-78 & 0.024 & 60   & 462  \\
 \bottomrule
 \end{tabular}%
 }
@@ -680,37 +680,37 @@ Threshold uncertainty is quantified via clip-level (cluster) bootstrap confidenc
 \textbf{Configuration} & \textbf{DT50 (ms)} & \textbf{DT75 (ms)} & \textbf{DT90 (ms)} & \textbf{SNR75 (dB)} \\
 \midrule
 Baseline
-& 20.0 [20.0, 20.0] (below\_range)
-& 1000.0 [1000.0, 1000.0] (above\_range)
-& 1000.0 [1000.0, 1000.0] (above\_range)
-& 20.0 [20.0, 20.0] (above\_range) \\
+& $<$20 [$<$20, $<$20]
+& $>$1000 [$>$1000, $>$1000]
+& $>$1000 [$>$1000, $>$1000]
+& $>$+20 [$>$+20, $>$+20] \\
 Base+OPRO-C
-& 20.0 [20.0, 20.0] (below\_range)
-& 36.8 [30.0, 50.2] (ok)
-& 392.9 [268.6, 633.3] (ok)
-& -10.0 [-10.0, -10.0] (below\_range) \\
+& $<$20 [$<$20, $<$20]
+& 36.8 [30.0, 50.2]
+& 392.9 [268.6, 633.3]
+& $<$$-$10 [$<$$-$10, $<$$-$10] \\
 LoRA+Hand
-& 20.0 [20.0, 20.0] (below\_range)
-& 20.0 [20.0, 20.0] (below\_range)
-& 94.1 [73.3, 168.4] (ok)
-& -10.0 [-10.0, -10.0] (below\_range) \\
+& $<$20 [$<$20, $<$20]
+& $<$20 [$<$20, $<$20]
+& 94.1 [73.3, 168.4]
+& $<$$-$10 [$<$$-$10, $<$$-$10] \\
 LoRA+OPRO-C
-& 20.0 [20.0, 20.0] (below\_range)
-& 20.0 [20.0, 20.0] (below\_range)
-& 66.2 [52.4, 91.4] (ok)
-& -10.0 [-10.0, -10.0] (below\_range) \\
+& $<$20 [$<$20, $<$20]
+& $<$20 [$<$20, $<$20]
+& 66.2 [52.4, 91.4]
+& $<$$-$10 [$<$$-$10, $<$$-$10] \\
 LoRA+OPRO-O
-& 20.0 [20.0, 20.0] (below\_range)
-& 20.0 [20.0, 20.0] (below\_range)
-& 66.2 [52.4, 91.4] (ok)
-& -10.0 [-10.0, -10.0] (below\_range) \\
+& $<$20 [$<$20, $<$20]
+& $<$20 [$<$20, $<$20]
+& 66.2 [52.4, 91.4]
+& $<$$-$10 [$<$$-$10, $<$$-$10] \\
 \bottomrule
 \end{tabular}
 
 \vspace{0.4em}
 \begin{flushleft}
 \footnotesize
-\textit{Censoring flags:} (below\_range) indicates the criterion is already met at the most challenging tested setting (true threshold is \emph{better} than the minimum tested); (above\_range) indicates the criterion is not met even at the easiest tested setting (true threshold is \emph{worse} than the maximum tested); (ok) indicates interpolation within the tested range.
+\textit{Censoring notation:} $<$20 ms indicates the criterion is already met at the most challenging tested duration (true threshold is better than 20 ms); $>$1000 ms indicates the criterion is not met even at the longest tested duration (true threshold is worse than 1000 ms). Similarly, $<$$-$10 dB and $>$+20 dB indicate censoring below and above the tested SNR range, respectively. Numeric values without inequality symbols indicate successful interpolation within the tested range.
 \end{flushleft}
 \end{table}
 
@@ -838,7 +838,7 @@ Table~\ref{tab:app_classic_vs_open} reports the paired comparison between Classi
 Configuration & $\Delta$BA & Discordant pairs & Discordant rate & $n_{01}$ & $n_{10}$ \\
 \midrule
 Base+OPRO (Classic vs Open)  & --- & \multicolumn{4}{c}{N/A (only Classic variant evaluated)} \\
-LoRA+OPRO (Classic vs Open)  & 0.0001 & 0  & 0.000 & 0 & 0  \\
+LoRA+OPRO (Classic vs Open)  & 0.0000 & 0  & 0.000 & 0 & 0  \\
 \bottomrule
 \end{tabular}
 
